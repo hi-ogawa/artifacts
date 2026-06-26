@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vitest PR #10554 — Config Resolution vs Server Creation</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2430;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --amber: #d29922;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #16263b 0%, var(--bg) 55%);
+    color: var(--text);
+    line-height: 1.45;
+    padding: 32px 20px 80px;
+  }
+  header {
+    max-width: 1180px;
+    margin: 0 auto 28px;
+    text-align: center;
+  }
+  header .tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 12px;
+    margin-bottom: 14px;
+    background: var(--panel);
+  }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+  }
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .legend {
+    max-width: 1180px;
+    margin: 18px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 22px;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  .grid {
+    max-width: 1180px;
+    margin: 30px auto 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 26px;
+  }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+
+  .col { position: relative; }
+  .col-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .col-head h2 { margin: 0; font-size: 18px; }
+  .pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 6px;
+    letter-spacing: .04em;
+  }
+  .pill.before { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.4); }
+  .pill.after  { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.4); }
+
+  .node {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 15px;
+    margin: 0;
+  }
+  .node .title {
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .node .title code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    background: var(--panel2);
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: var(--accent);
+  }
+  .node .desc {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 5px;
+  }
+  .node .file {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: #6e7681;
+    margin-top: 6px;
+  }
+  .arrow {
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+  }
+  .arrow svg { display: block; }
+
+  /* accent variants */
+  .node.config { border-color: rgba(188,140,255,.55); box-shadow: 0 0 0 1px rgba(188,140,255,.12) inset; }
+  .node.server { border-color: rgba(88,166,255,.55); box-shadow: 0 0 0 1px rgba(88,166,255,.12) inset; }
+  .node.harness { border-color: rgba(247,120,186,.55); box-shadow: 0 0 0 1px rgba(247,120,186,.12) inset; }
+  .node.entry { border-color: var(--border); background: var(--panel2); }
+  .node.problem { border-style: dashed; border-color: rgba(210,153,34,.6); }
+
+  .badge {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .badge.cfg { background: rgba(188,140,255,.16); color: var(--purple); }
+  .badge.srv { background: rgba(88,166,255,.16); color: var(--accent); }
+  .badge.hrn { background: rgba(247,120,186,.16); color: var(--pink); }
+  .badge.warn { background: rgba(210,153,34,.16); color: var(--amber); }
+
+  /* Vite server instance — ONE consistent token used everywhere a real server exists */
+  .server-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: #d6ecff;
+    background: linear-gradient(180deg, rgba(88,166,255,.26), rgba(88,166,255,.08));
+    border: 1.5px solid rgba(88,166,255,.72);
+    border-radius: 9px;
+    padding: 7px 12px;
+    box-shadow: inset 0 0 0 1px rgba(88,166,255,.10), 0 3px 10px rgba(88,166,255,.14);
+    white-space: nowrap;
+  }
+  .server-chip .ico { width: 16px; height: 16px; flex: none; color: var(--accent); }
+  .server-chip .sub { color: #9ec5f0; font-weight: 600; opacity: .85; }
+  /* a server that no longer exists in the "after" world */
+  .server-chip.gone {
+    color: var(--muted);
+    border: 1.5px dashed rgba(248,81,73,.55);
+    background: rgba(248,81,73,.06);
+    box-shadow: none;
+  }
+  .server-chip.gone .ico { color: var(--red); }
+
+  .note {
+    font-size: 12px;
+    background: var(--panel2);
+    border-left: 3px solid var(--amber);
+    border-radius: 6px;
+    padding: 9px 12px;
+    margin-top: 12px;
+    color: var(--muted);
+  }
+  .note b { color: var(--text); }
+
+  .summary {
+    max-width: 1180px;
+    margin: 40px auto 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 26px;
+  }
+  .summary h3 { margin: 0 0 14px; font-size: 16px; }
+  .summary table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .summary th, .summary td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .summary th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .summary td:first-child { color: var(--text); font-weight: 600; width: 26%; }
+  .summary .b { color: var(--red); }
+  .summary .a { color: var(--green); }
+  .summary code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; background: var(--panel2); padding: 1px 5px; border-radius: 4px;
+  }
+  footer { max-width: 1180px; margin: 26px auto 0; color: #6e7681; font-size: 12px; text-align: center; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="ico-server" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="2.3" width="12" height="4.2" rx="1.2"/>
+    <rect x="2" y="9.5" width="12" height="4.2" rx="1.2"/>
+    <line x1="4.4" y1="4.4" x2="4.4" y2="4.4"/>
+    <line x1="4.4" y1="11.6" x2="4.4" y2="11.6"/>
+  </symbol>
+</svg>
+<header>
+  <span class="tag">Vitest · PR #10554</span>
+  <h1>Separate Config Resolution from Server Creation</h1>
+  <p>Reworking <code style="color:var(--accent)">resolveConfig</code> so the full config is resolved <em>before</em> any Vite server exists — and introducing a <code style="color:var(--accent)">PluginHarness</code> to give plugins access to the <code>Vitest</code> instance after resolution.</p>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--purple)"></i> Config resolution</span>
+    <span><i class="dot" style="background:var(--pink)"></i> PluginHarness</span>
+    <span><i class="dot" style="background:var(--amber)"></i> Pain point / change</span>
+    <span style="gap:9px;">
+      <span class="server-chip" style="padding:4px 9px;font-size:11px;gap:6px;"><svg class="ico" style="width:13px;height:13px;"><use href="#ico-server"/></svg>Vite&nbsp;server</span>
+      = one Vite server instance (count the tokens)
+    </span>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- BEFORE -->
+  <section class="col">
+    <div class="col-head">
+      <span class="pill before">BEFORE</span>
+      <h2>main</h2>
+    </div>
+
+    <div class="node entry">
+      <div class="title"><code>createVitest(options, viteOverrides, vitestOptions)</code></div>
+      <div class="desc">Single entry. Config and server are entangled inside one flow.</div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node">
+      <div class="title">new Vitest(cliOptions, options) <span class="badge srv">runtime</span></div>
+      <div class="desc">Instance built from <b>raw CLI options</b>. Creates its own <code>Logger</code> &amp; <code>packageInstaller</code> internally. Config not resolved yet.</div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node server problem">
+      <div class="title">createServer() &rarr; resolveConfig <span class="badge srv">server-first</span></div>
+      <div class="desc">A Vite dev server is stood up <b>first</b>; the test config is resolved <b>against the live server</b>. You can't get a resolved config without a server.</div>
+      <div style="margin-top:10px;"><span class="server-chip"><svg class="ico"><use href="#ico-server"/></svg>Vite&nbsp;server <span class="sub">created here</span></span></div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node problem">
+      <div class="title"><code>vitest._setServer(options, server)</code> <span class="badge warn">coupled</span></div>
+      <div class="desc">Server handed back into the instance; projects resolved here too.</div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node">
+      <div class="title">Lazy getters w/ <code>assert()</code> <span class="badge warn">guarded</span></div>
+      <div class="desc"><code>config</code> / <code>vite</code> / <code>state</code> / <code>snapshot</code> / <code>cache</code> are getters that throw "not set yet" until the server step runs.</div>
+      <div class="file">core.ts — get config() / get vite() …</div>
+    </div>
+
+    <div class="note">
+      <b>Limitations (the issues this PR fixes):</b> no way to fully resolve config without booting a server (#6912), and plugins have no clean handle to the <code>Vitest</code> instance once config is ready (#8572).
+    </div>
+  </section>
+
+  <!-- AFTER -->
+  <section class="col">
+    <div class="col-head">
+      <span class="pill after">AFTER</span>
+      <h2>feat/refactor-config-resolution</h2>
+    </div>
+
+    <div class="node entry">
+      <div class="title"><code>createVitest(options, viteOverrides, vitestOptions)</code></div>
+      <div class="desc">Same public entry, but now orchestrates 3 explicit, ordered phases.</div>
+      <div class="file">node/create.ts</div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node harness">
+      <div class="title">1 · new PluginHarness(logger, packageInstaller) <span class="badge hrn">harness</span></div>
+      <div class="desc">Owns <code>logger</code>, <code>packageInstaller</code>, <code>version</code> and a <b>late-bound</b> <code>vitest</code> ref. Threaded into every config-time plugin so they can call <code>getVitest()</code> after resolution.</div>
+      <div class="file">node/config/pluginHarness.ts</div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node config">
+      <div class="title">2 · resolveConfig(options, viteOverrides, harness) <span class="badge cfg">config-first</span></div>
+      <div class="desc"><b>Fully resolves config with no running server.</b> Runs Vite's <code>resolveConfig</code> through pre-plugins, then resolves test config + all projects, returning a <code>ResolvedViteConfig</code>.</div>
+      <div class="file">node/config/resolveConfig.ts</div>
+    </div>
+
+    <div style="margin:10px 0 0; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div class="node config" style="padding:9px 11px;">
+        <div class="title" style="font-size:12.5px;"><code>CliOverride</code> · <code>VitestConfig</code></div>
+        <div class="desc" style="margin-top:3px;">pre-plugins apply CLI &amp; core config</div>
+      </div>
+      <div class="node config" style="padding:9px 11px;">
+        <div class="title" style="font-size:12.5px;"><code>resolveTestConfig</code></div>
+        <div class="desc" style="margin-top:3px;">single-config resolver (extracted)</div>
+      </div>
+      <div class="node config" style="padding:9px 11px;">
+        <div class="title" style="font-size:12.5px;"><code>BrowserLoaderPlugin</code></div>
+        <div class="desc" style="margin-top:3px;">browser contribution / single server</div>
+      </div>
+      <div class="node config" style="padding:9px 11px;">
+        <div class="title" style="font-size:12.5px;"><code>resolveProjectEntries</code></div>
+        <div class="desc" style="margin-top:3px;">root + projects + benchmark expansion</div>
+      </div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node">
+      <div class="title">new Vitest(harness, viteConfig) <span class="badge srv">runtime</span></div>
+      <div class="desc">Constructed from an <b>already-resolved</b> config. <code>config</code>, <code>viteConfig</code>, <code>logger</code> set immediately as real fields (no more lazy getters / <code>assert</code>).</div>
+      <div class="file">node/core.ts — constructor(harness, viteConfig)</div>
+    </div>
+
+    <div class="arrow">&#8595;</div>
+
+    <div class="node server">
+      <div class="title">3 · await vitest._start(config) <span class="badge srv">server</span></div>
+      <div class="desc">Server created <b>from</b> the resolved config:<br><code>_setRootConfig</code> &rarr; <code>_attachRootServer</code> &rarr; <code>_attachProjectServers</code>. On failure, <code>close()</code> cleans everything up.</div>
+      <div style="margin-top:10px;"><span class="server-chip"><svg class="ico"><use href="#ico-server"/></svg>Vite&nbsp;server <span class="sub">created here</span></span></div>
+      <div class="file">node/core.ts — _start()</div>
+    </div>
+
+    <div class="note" style="border-left-color:var(--green)">
+      <b>Result:</b> config is now a standalone, server-independent artifact (resolve once, create server later), and the harness gives plugins a stable hook to the <code>Vitest</code> instance post-resolution.
+    </div>
+  </section>
+</div>
+
+<!-- BROWSER SERVER REUSE HIGHLIGHT -->
+<section class="summary" style="margin-top:40px;">
+  <h3 style="display:flex;align-items:center;gap:10px;">
+    <span class="dot" style="background:var(--accent)"></span>
+    Highlight: the project's own Vite server is <em style="color:var(--accent);font-style:normal;">reused</em> as the browser server
+  </h3>
+  <p style="color:var(--muted);font-size:13.5px;margin:0 0 6px;">
+    Sharing one browser server across a project's <code>instances</code> (chromium/firefox/webkit) was <b>already true before</b> — that's not what changed. The new layer is at the <b>project</b> level: a browser project used to run <b>two</b> Vite servers — its own node <code>vite</code> server <b>plus a separate browser server</b> (<code>_parentBrowser.vite</code>, created lazily by <code>_initBrowserServer</code>). This PR collapses them into <b>one</b> server per project.
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:18px;">
+    <!-- before topology -->
+    <div>
+      <div class="col-head" style="margin-bottom:12px;">
+        <span class="pill before">BEFORE</span>
+        <h2 style="font-size:15px;">two servers per browser project</h2>
+      </div>
+      <div class="node entry" style="margin-bottom:12px;">
+        <div class="title" style="font-size:13px;">project <code>"app"</code> (browser enabled)</div>
+        <div class="desc" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;">
+          <span class="server-chip"><svg class="ico"><use href="#ico-server"/></svg>Vite&nbsp;server <span class="sub">node · project.vite</span></span>
+          <span class="server-chip"><svg class="ico"><use href="#ico-server"/></svg>Vite&nbsp;server <span class="sub">browser · _parentBrowser.vite</span></span>
+        </div>
+        <div style="text-align:right;font-size:11px;font-weight:700;color:var(--red);margin-top:8px;">2 server instances</div>
+      </div>
+      <div class="node" style="padding:8px 10px;text-align:center;font-size:11px;color:var(--muted);">
+        instances chromium · firefox · webkit &nbsp;&rarr;&nbsp; already shared the <b>browser</b> server <span style="color:var(--green)">(unchanged)</span>
+      </div>
+      <div class="note" style="border-left-color:var(--red);">
+        Two distinct <code>ViteDevServer</code>s coexist (the browser one spun up lazily by <code>_initBrowserServer</code>): teardown &amp; cache logic had to walk both <code>vite.environments</code> <b>and</b> <code>browser?.vite.environments</code>.
+      </div>
+    </div>
+
+    <!-- after topology -->
+    <div>
+      <div class="col-head" style="margin-bottom:12px;">
+        <span class="pill after">AFTER</span>
+        <h2 style="font-size:15px;">one server per project</h2>
+      </div>
+      <div class="node entry" style="margin-bottom:12px;">
+        <div class="title" style="font-size:13px;">project <code>"app"</code> (browser enabled)</div>
+        <div class="desc" style="display:flex;gap:10px;margin-top:10px;">
+          <span class="server-chip"><svg class="ico"><use href="#ico-server"/></svg>Vite&nbsp;server <span class="sub">node + browser · project.vite === project.browser.vite</span></span>
+        </div>
+        <div style="text-align:right;font-size:11px;font-weight:700;color:var(--green);margin-top:8px;">1 server instance &nbsp;·&nbsp; built once by <code style="background:var(--panel2);padding:1px 5px;border-radius:4px;color:var(--accent);font-family:ui-monospace,Menlo,monospace;">createClusterServer</code></div>
+      </div>
+      <div class="node" style="padding:8px 10px;text-align:center;font-size:11px;color:var(--muted);">
+        instances chromium · firefox · webkit &nbsp;&rarr;&nbsp; still share it via <code>_parentBrowser.spawn()</code> <span style="color:var(--green)">(unchanged)</span>
+      </div>
+      <div class="note" style="border-left-color:var(--green);">
+        Server attach dedupes by <code>ResolvedViteConfig</code> identity (<code>Map&lt;viteConfig, TestProject&gt;</code>): the primary owns the one server; root/benchmark siblings that resolve to the same config reuse it instead of creating their own.
+      </div>
+    </div>
+  </div>
+
+  <div class="note" style="border-left-color:var(--accent);margin-top:8px;">
+    <b>Why it's possible now:</b> with config fully resolved up front, server creation is a separate phase that can collapse the node + browser servers into one. <code>applyBrowserOptimizeDeps</code> also aggregates <code>optimizeDeps</code> for that single server before it's created.
+    <div class="file" style="margin-top:6px;">core.ts — _attachRootServer / _attachProjectServers · browserLoader.ts — createClusterServer · resolveProjects.ts — attachProjectsFromEntries (dedupe by viteConfig)</div>
+  </div>
+</section>
+
+<!-- SUMMARY TABLE -->
+<section class="summary">
+  <h3>Key differences at a glance</h3>
+  <table>
+    <thead>
+      <tr><th>Aspect</th><th>Before</th><th>After</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Ordering</td>
+        <td class="b">Server created first, then config resolved against it</td>
+        <td class="a">Config fully resolved first, server created from it</td>
+      </tr>
+      <tr>
+        <td><code>Vitest</code> constructor</td>
+        <td class="b"><code>(cliOptions, options)</code> + deprecated <code>(mode, …)</code> overloads</td>
+        <td class="a"><code>(harness, viteConfig)</code> — takes resolved config</td>
+      </tr>
+      <tr>
+        <td>State fields</td>
+        <td class="b">Lazy getters guarded by <code>assert()</code> ("not set yet")</td>
+        <td class="a">Plain fields set during construction / <code>_start</code></td>
+      </tr>
+      <tr>
+        <td>Plugin &rarr; Vitest access</td>
+        <td class="b">No clean handle after config resolves</td>
+        <td class="a"><code>PluginHarness</code> with late-bound <code>getVitest()</code></td>
+      </tr>
+      <tr>
+        <td>Config resolution</td>
+        <td class="b">Inline, coupled to <code>_setServer</code></td>
+        <td class="a">Standalone <code>resolveConfig()</code> → <code>ResolvedViteConfig</code></td>
+      </tr>
+      <tr>
+        <td>Browser project servers</td>
+        <td class="b">Two servers: node <code>project.vite</code> + a separate <code>_parentBrowser.vite</code></td>
+        <td class="a">One server reused for both (<code>project.vite</code> === <code>project.browser.vite</code>)</td>
+      </tr>
+      <tr>
+        <td>Server reuse keying</td>
+        <td class="b">Ad-hoc: root by config-file path; instances/bench copy <code>parent._vite</code></td>
+        <td class="a">Unified dedupe by resolved <code>viteConfig</code> identity (primary owns / siblings reuse)</td>
+      </tr>
+      <tr>
+        <td>Public API</td>
+        <td class="b">—</td>
+        <td class="a">Exports <code>resolveConfig</code>, <code>resolveApiServerConfig</code>, <code>PluginHarness</code></td>
+      </tr>
+      <tr>
+        <td>Fixes</td>
+        <td class="b" colspan="2" style="color:var(--muted)">#6912 (resolve config without a server) · #8572 (plugin access to vitest)</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  Visualization of <a href="https://github.com/vitest-dev/vitest/pull/10554">vitest-dev/vitest#10554</a> — <em>refactor!: separate config resolution from the server creation</em>. Generated for review; not part of the codebase.
+</footer>
+</body>
+</html>
