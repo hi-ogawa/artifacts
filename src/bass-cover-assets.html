@@ -114,6 +114,12 @@
     cursor: not-allowed;
   }
 
+  .button[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
   .status {
     min-height: 24px;
     margin-top: 10px;
@@ -235,8 +241,7 @@
         </div>
         <div id="status" class="status"></div>
         <div class="actions" style="margin-top: 10px;">
-          <a class="button" id="download-thumbnail" href="#" download>Download</a>
-          <a class="button secondary" id="open-thumbnail" href="#" target="_blank" rel="noopener">Open</a>
+          <a class="button" id="open-thumbnail" href="#" target="_blank" rel="noopener" aria-disabled="true">Open</a>
           <button class="secondary" id="copy-thumbnail" disabled>Copy URL</button>
         </div>
       </div>
@@ -278,7 +283,6 @@ const statusEl = document.querySelector("#status");
 const thumbnailPreview = document.querySelector("#thumbnail-preview");
 const thumbnailLabel = document.querySelector("#thumbnail-label");
 const thumbnailCode = document.querySelector("#thumbnail-code");
-const downloadThumbnail = document.querySelector("#download-thumbnail");
 const openThumbnail = document.querySelector("#open-thumbnail");
 const copyThumbnail = document.querySelector("#copy-thumbnail");
 const guidePreview = document.querySelector("#guide-preview");
@@ -334,9 +338,8 @@ function renderThumbnail(id) {
   thumbnailPreview.innerHTML = `<img src="${url}" alt="${variant} thumbnail">`;
   thumbnailLabel.textContent = variant;
   thumbnailCode.textContent = `${id}.jpg`;
-  downloadThumbnail.href = url;
-  downloadThumbnail.download = `youtube-${id}-${variant}.jpg`;
   openThumbnail.href = url;
+  openThumbnail.setAttribute("aria-disabled", "false");
   copyThumbnail.disabled = false;
   setStatus(`Video ID: ${id}`);
 }
