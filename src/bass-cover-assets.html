@@ -66,12 +66,12 @@
 
   .input-row {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr 180px auto;
     gap: 10px;
     margin-top: 16px;
   }
 
-  input {
+  input, select {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -81,7 +81,7 @@
     background: #fffdf9;
   }
 
-  input:focus {
+  input:focus, select:focus {
     outline: 3px solid var(--accent-soft);
     border-color: var(--accent);
   }
@@ -123,11 +123,9 @@
 
   .status.error { color: var(--danger); }
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+  .result-slot {
     margin-top: 16px;
+    min-height: 420px;
   }
 
   .card {
@@ -149,6 +147,11 @@
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+
+  .thumb-placeholder {
+    color: var(--muted);
+    font-size: 14px;
   }
 
   .card-body {
@@ -212,7 +215,8 @@
 
   @media (max-width: 760px) {
     main { margin-top: 24px; }
-    .input-row, .grid, .guide-wrap { grid-template-columns: 1fr; }
+    .input-row, .guide-wrap { grid-template-columns: 1fr; }
+    .result-slot { min-height: 360px; }
   }
 </style>
 </head>
@@ -225,13 +229,31 @@
 
   <section class="panel">
     <h2>YouTube Thumbnail</h2>
-    <p>Paste a YouTube URL or video ID. Use max resolution first; fall back if YouTube does not have it.</p>
+    <p>Paste a YouTube URL or video ID. Default is max resolution.</p>
     <div class="input-row">
       <input id="youtube-input" autocomplete="off" spellcheck="false" placeholder="https://www.youtube.com/watch?v=... or video id">
+      <select id="variant-select" aria-label="Thumbnail type">
+        <option value="maxresdefault">maxresdefault</option>
+        <option value="sddefault">sddefault</option>
+        <option value="hqdefault">hqdefault</option>
+        <option value="mqdefault">mqdefault</option>
+      </select>
       <button id="load-button">Load</button>
     </div>
     <div id="status" class="status"></div>
-    <div id="thumbnail-grid" class="grid" hidden></div>
+    <div class="result-slot">
+      <article class="card">
+        <div class="thumb" id="thumbnail-preview"><span class="thumb-placeholder">thumbnail preview</span></div>
+        <div class="card-body">
+          <div class="card-title"><strong id="thumbnail-label">maxresdefault</strong><code id="thumbnail-code">waiting</code></div>
+          <div class="actions" style="margin-top: 10px;">
+            <a class="button" id="download-thumbnail" href="#" download>Download</a>
+            <a class="button secondary" id="open-thumbnail" href="#" target="_blank" rel="noopener">Open</a>
+            <button class="secondary" id="copy-thumbnail" disabled>Copy URL</button>
+          </div>
+        </div>
+      </article>
+    </div>
   </section>
 
   <section class="panel">
@@ -251,23 +273,23 @@
 </main>
 
 <script>
-const variants = [
-  ["maxresdefault", "Max", "1280x720 when available"],
-  ["sddefault", "SD", "640x480"],
-  ["hqdefault", "HQ", "480x360"],
-  ["mqdefault", "MQ", "320x180"],
-];
-
 const guideSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
   <rect x="0" y="0" width="656" height="1080" fill="#aaff00" opacity="0.588235"/>
   <rect x="1264" y="0" width="656" height="1080" fill="#aaff00" opacity="0.588235"/>
 </svg>`;
 
 const input = document.querySelector("#youtube-input");
+const variantSelect = document.querySelector("#variant-select");
 const loadButton = document.querySelector("#load-button");
 const statusEl = document.querySelector("#status");
-const grid = document.querySelector("#thumbnail-grid");
+const thumbnailPreview = document.querySelector("#thumbnail-preview");
+const thumbnailLabel = document.querySelector("#thumbnail-label");
+const thumbnailCode = document.querySelector("#thumbnail-code");
+const downloadThumbnail = document.querySelector("#download-thumbnail");
+const openThumbnail = document.querySelector("#open-thumbnail");
+const copyThumbnail = document.querySelector("#copy-thumbnail");
 const guidePreview = document.querySelector("#guide-preview");
+let currentThumbnailUrl = "";
 
 guidePreview.innerHTML = guideSvg;
 
@@ -312,39 +334,27 @@ function downloadUrl(url, filename) {
   a.remove();
 }
 
-function renderThumbnails(id) {
-  grid.innerHTML = "";
-  for (const [variant, label, hint] of variants) {
-    const url = thumbUrl(id, variant);
-    const card = document.createElement("article");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="thumb"><img src="${url}" alt="${label} thumbnail"></div>
-      <div class="card-body">
-        <div class="card-title"><strong>${label}</strong><code>${variant}.jpg</code></div>
-        <p class="note">${hint}</p>
-        <div class="actions" style="margin-top: 10px;">
-          <a class="button" href="${url}" download="youtube-${id}-${variant}.jpg">Download</a>
-          <a class="button secondary" href="${url}" target="_blank" rel="noopener">Open</a>
-          <button class="secondary" data-copy="${url}">Copy URL</button>
-        </div>
-      </div>
-    `;
-    card.querySelector("[data-copy]").addEventListener("click", () => copyText(url));
-    grid.append(card);
-  }
-  grid.hidden = false;
+function renderThumbnail(id) {
+  const variant = variantSelect.value;
+  const url = thumbUrl(id, variant);
+  currentThumbnailUrl = url;
+  thumbnailPreview.innerHTML = `<img src="${url}" alt="${variant} thumbnail">`;
+  thumbnailLabel.textContent = variant;
+  thumbnailCode.textContent = `${id}.jpg`;
+  downloadThumbnail.href = url;
+  downloadThumbnail.download = `youtube-${id}-${variant}.jpg`;
+  openThumbnail.href = url;
+  copyThumbnail.disabled = false;
   setStatus(`Video ID: ${id}`);
 }
 
 function load() {
   const id = parseVideoId(input.value);
   if (!id) {
-    grid.hidden = true;
     setStatus("Could not find a valid 11-character YouTube video ID.", true);
     return;
   }
-  renderThumbnails(id);
+  renderThumbnail(id);
 }
 
 function downloadBlob(blob, filename) {
@@ -379,6 +389,10 @@ loadButton.addEventListener("click", load);
 input.addEventListener("keydown", (event) => {
   if (event.key === "Enter") load();
 });
+variantSelect.addEventListener("change", () => {
+  if (parseVideoId(input.value)) load();
+});
+copyThumbnail.addEventListener("click", () => copyText(currentThumbnailUrl));
 document.querySelector("#download-guide-svg").addEventListener("click", downloadGuideSvg);
 document.querySelector("#download-guide-png").addEventListener("click", downloadGuidePng);
 
