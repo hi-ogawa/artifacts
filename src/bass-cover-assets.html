@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bass Cover Assets</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f4ef;
+    --panel: #ffffff;
+    --text: #1d1b18;
+    --muted: #6d6760;
+    --border: #ddd6cc;
+    --accent: #2f6f5e;
+    --accent-soft: #e4f1ed;
+    --danger: #8a3b2f;
+    --shadow: 0 10px 30px rgba(43, 38, 30, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+
+  main {
+    width: min(1040px, calc(100% - 32px));
+    margin: 40px auto 72px;
+  }
+
+  header {
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+  }
+
+  h2 {
+    margin: 0 0 16px;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+
+  p {
+    margin: 0;
+    color: var(--muted);
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-top: 18px;
+  }
+
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 13px 14px;
+    font: inherit;
+    color: var(--text);
+    background: #fffdf9;
+  }
+
+  input:focus {
+    outline: 3px solid var(--accent-soft);
+    border-color: var(--accent);
+  }
+
+  button, .button {
+    appearance: none;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    background: var(--accent);
+    color: white;
+    font: inherit;
+    font-weight: 650;
+    padding: 12px 14px;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  button.secondary, .button.secondary {
+    background: #fffdf9;
+    color: var(--accent);
+  }
+
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .status {
+    min-height: 24px;
+    margin-top: 10px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .status.error { color: var(--danger); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fffdf9;
+  }
+
+  .thumb {
+    aspect-ratio: 16 / 9;
+    background: #ece6db;
+    display: grid;
+    place-items: center;
+  }
+
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .card-body {
+    padding: 12px;
+  }
+
+  .card-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .card-title strong { font-size: 15px; }
+  .card-title code { color: var(--muted); font-size: 12px; }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .actions button, .actions .button {
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .guide-wrap {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 18px;
+    align-items: center;
+  }
+
+  .guide-preview {
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background:
+      linear-gradient(45deg, #ddd 25%, transparent 25%),
+      linear-gradient(-45deg, #ddd 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ddd 75%),
+      linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background-size: 28px 28px;
+    background-position: 0 0, 0 14px, 14px -14px, -14px 0;
+    overflow: hidden;
+  }
+
+  .guide-preview svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .note {
+    margin-top: 10px;
+    font-size: 13px;
+  }
+
+  @media (max-width: 760px) {
+    main { margin-top: 24px; }
+    .input-row, .grid, .guide-wrap { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Bass Cover Assets</h1>
+    <p>Boring helper for grabbing public production assets. Everything runs in this browser tab.</p>
+  </header>
+
+  <section class="panel">
+    <h2>YouTube Thumbnail</h2>
+    <p>Paste a YouTube URL or video ID. Use max resolution first; fall back if YouTube does not have it.</p>
+    <div class="input-row">
+      <input id="youtube-input" autocomplete="off" spellcheck="false" placeholder="https://www.youtube.com/watch?v=... or video id">
+      <button id="load-button">Load</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="thumbnail-grid" class="grid" hidden></div>
+  </section>
+
+  <section class="panel">
+    <h2>Kdenlive Vertical Guide</h2>
+    <div class="guide-wrap">
+      <div>
+        <p>1920x1080 transparent guide with #aaff00 side masks at alpha 150/255. Center crop is 608x1080 at x=656.</p>
+        <div class="actions" style="margin-top: 14px;">
+          <button id="download-guide-png">Download PNG</button>
+          <button id="download-guide-svg" class="secondary">Download SVG</button>
+        </div>
+        <p class="note">PNG is the safe Kdenlive import. SVG is the editable source.</p>
+      </div>
+      <div class="guide-preview" id="guide-preview"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const variants = [
+  ["maxresdefault", "Max", "1280x720 when available"],
+  ["sddefault", "SD", "640x480"],
+  ["hqdefault", "HQ", "480x360"],
+  ["mqdefault", "MQ", "320x180"],
+];
+
+const guideSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect x="0" y="0" width="656" height="1080" fill="#aaff00" opacity="0.588235"/>
+  <rect x="1264" y="0" width="656" height="1080" fill="#aaff00" opacity="0.588235"/>
+</svg>`;
+
+const input = document.querySelector("#youtube-input");
+const loadButton = document.querySelector("#load-button");
+const statusEl = document.querySelector("#status");
+const grid = document.querySelector("#thumbnail-grid");
+const guidePreview = document.querySelector("#guide-preview");
+
+guidePreview.innerHTML = guideSvg;
+
+function parseVideoId(value) {
+  const text = value.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(text)) return text;
+
+  try {
+    const url = new URL(text);
+    if (url.hostname === "youtu.be") {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    const id = url.searchParams.get("v");
+    return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function thumbUrl(id, variant) {
+  return `https://img.youtube.com/vi/${id}/${variant}.jpg`;
+}
+
+function setStatus(text, error = false) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle("error", error);
+}
+
+async function copyText(text) {
+  await navigator.clipboard.writeText(text);
+  setStatus("Copied URL.");
+}
+
+function downloadUrl(url, filename) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+function renderThumbnails(id) {
+  grid.innerHTML = "";
+  for (const [variant, label, hint] of variants) {
+    const url = thumbUrl(id, variant);
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="thumb"><img src="${url}" alt="${label} thumbnail"></div>
+      <div class="card-body">
+        <div class="card-title"><strong>${label}</strong><code>${variant}.jpg</code></div>
+        <p class="note">${hint}</p>
+        <div class="actions" style="margin-top: 10px;">
+          <a class="button" href="${url}" download="youtube-${id}-${variant}.jpg">Download</a>
+          <a class="button secondary" href="${url}" target="_blank" rel="noopener">Open</a>
+          <button class="secondary" data-copy="${url}">Copy URL</button>
+        </div>
+      </div>
+    `;
+    card.querySelector("[data-copy]").addEventListener("click", () => copyText(url));
+    grid.append(card);
+  }
+  grid.hidden = false;
+  setStatus(`Video ID: ${id}`);
+}
+
+function load() {
+  const id = parseVideoId(input.value);
+  if (!id) {
+    grid.hidden = true;
+    setStatus("Could not find a valid 11-character YouTube video ID.", true);
+    return;
+  }
+  renderThumbnails(id);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  downloadUrl(url, filename);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadGuideSvg() {
+  downloadBlob(new Blob([guideSvg], { type: "image/svg+xml" }), "vertical-guide-608x1080.svg");
+}
+
+function downloadGuidePng() {
+  const img = new Image();
+  const svgUrl = URL.createObjectURL(new Blob([guideSvg], { type: "image/svg+xml" }));
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1920;
+    canvas.height = 1080;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(svgUrl);
+    canvas.toBlob((blob) => {
+      downloadBlob(blob, "vertical-guide-608x1080.png");
+    }, "image/png");
+  };
+  img.src = svgUrl;
+}
+
+loadButton.addEventListener("click", load);
+input.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") load();
+});
+document.querySelector("#download-guide-svg").addEventListener("click", downloadGuideSvg);
+document.querySelector("#download-guide-png").addEventListener("click", downloadGuidePng);
+
+const params = new URLSearchParams(location.search);
+const initial = params.get("v") || params.get("url");
+if (initial) {
+  input.value = initial;
+  load();
+}
+</script>
+</body>
+</html>
