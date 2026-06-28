@@ -123,27 +123,26 @@
 
   .status.error { color: var(--danger); }
 
-  .result-slot {
-    margin-top: 16px;
-    min-height: 420px;
+  .tool-wrap {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 18px;
+    align-items: start;
   }
 
-  .card {
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-    background: #fffdf9;
-  }
-
-  .thumbnail-card {
-    max-width: 260px;
+  .tool-preview {
+    width: 260px;
+    max-width: 100%;
   }
 
   .thumb {
     aspect-ratio: 16 / 9;
     background: #ece6db;
+    border: 1px solid var(--border);
+    border-radius: 14px;
     display: grid;
     place-items: center;
+    overflow: hidden;
   }
 
   .thumb img {
@@ -158,20 +157,16 @@
     font-size: 14px;
   }
 
-  .card-body {
-    padding: 12px;
-  }
-
-  .card-title {
+  .preview-label {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 10px;
+    margin-top: 8px;
   }
 
-  .card-title strong { font-size: 15px; }
-  .card-title code { color: var(--muted); font-size: 12px; }
+  .preview-label strong { font-size: 13px; }
+  .preview-label code { color: var(--muted); font-size: 12px; }
 
   .actions {
     display: flex;
@@ -183,13 +178,6 @@
     padding: 8px 10px;
     border-radius: 10px;
     font-size: 13px;
-  }
-
-  .guide-wrap {
-    display: grid;
-    grid-template-columns: 1fr 260px;
-    gap: 18px;
-    align-items: center;
   }
 
   .guide-preview {
@@ -219,8 +207,7 @@
 
   @media (max-width: 760px) {
     main { margin-top: 24px; }
-    .input-row, .guide-wrap { grid-template-columns: 1fr; }
-    .result-slot { min-height: 360px; }
+    .input-row, .tool-wrap { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -232,38 +219,38 @@
   </header>
 
   <section class="panel">
-    <h2>YouTube Thumbnail</h2>
-    <p>Paste a YouTube URL or video ID. Default is max resolution.</p>
-    <div class="input-row">
-      <input id="youtube-input" autocomplete="off" spellcheck="false" placeholder="https://www.youtube.com/watch?v=... or video id">
-      <select id="variant-select" aria-label="Thumbnail type">
-        <option value="maxresdefault">maxresdefault</option>
-        <option value="sddefault">sddefault</option>
-        <option value="hqdefault">hqdefault</option>
-        <option value="mqdefault">mqdefault</option>
-      </select>
-      <button id="load-button">Load</button>
-    </div>
-    <div id="status" class="status"></div>
-    <div class="result-slot">
-      <article class="card thumbnail-card">
-        <div class="thumb" id="thumbnail-preview"><span class="thumb-placeholder">thumbnail preview</span></div>
-        <div class="card-body">
-          <div class="card-title"><strong id="thumbnail-label">maxresdefault</strong><code id="thumbnail-code">waiting</code></div>
-          <div class="actions" style="margin-top: 10px;">
-            <a class="button" id="download-thumbnail" href="#" download>Download</a>
-            <a class="button secondary" id="open-thumbnail" href="#" target="_blank" rel="noopener">Open</a>
-            <button class="secondary" id="copy-thumbnail" disabled>Copy URL</button>
-          </div>
+    <div class="tool-wrap">
+      <div>
+        <h2>YouTube Thumbnail</h2>
+        <p>Paste a YouTube URL or video ID. Default is max resolution.</p>
+        <div class="input-row">
+          <input id="youtube-input" autocomplete="off" spellcheck="false" placeholder="https://www.youtube.com/watch?v=... or video id">
+          <select id="variant-select" aria-label="Thumbnail type">
+            <option value="maxresdefault">maxresdefault</option>
+            <option value="sddefault">sddefault</option>
+            <option value="hqdefault">hqdefault</option>
+            <option value="mqdefault">mqdefault</option>
+          </select>
+          <button id="load-button">Load</button>
         </div>
-      </article>
+        <div id="status" class="status"></div>
+        <div class="actions" style="margin-top: 10px;">
+          <a class="button" id="download-thumbnail" href="#" download>Download</a>
+          <a class="button secondary" id="open-thumbnail" href="#" target="_blank" rel="noopener">Open</a>
+          <button class="secondary" id="copy-thumbnail" disabled>Copy URL</button>
+        </div>
+      </div>
+      <div class="tool-preview">
+        <div class="thumb" id="thumbnail-preview"><span class="thumb-placeholder">thumbnail preview</span></div>
+        <div class="preview-label"><strong id="thumbnail-label">maxresdefault</strong><code id="thumbnail-code">waiting</code></div>
+      </div>
     </div>
   </section>
 
   <section class="panel">
-    <h2>Kdenlive Vertical Guide</h2>
-    <div class="guide-wrap">
+    <div class="tool-wrap">
       <div>
+        <h2>Kdenlive Vertical Guide</h2>
         <p>1920x1080 transparent guide with #aaff00 side masks at alpha 150/255. Center crop is 608x1080 at x=656.</p>
         <div class="actions" style="margin-top: 14px;">
           <button id="download-guide-png">Download PNG</button>
@@ -271,7 +258,9 @@
         </div>
         <p class="note">PNG is the safe Kdenlive import. SVG is the editable source.</p>
       </div>
-      <div class="guide-preview" id="guide-preview"></div>
+      <div class="tool-preview">
+        <div class="guide-preview" id="guide-preview"></div>
+      </div>
     </div>
   </section>
 </main>
