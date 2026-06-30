@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vite+ ↔ Vitest integration — architectural research (#10635)</title>
+<style>
+  :root{
+    --bg:#fbfbf9; --ink:#1c1b1a; --muted:#6b6862; --line:#e3e1db;
+    --rust:#c65d2e;        /* Rust CLI layer */
+    --rust-bg:#fbeee6;
+    --js:#2f6fb3;          /* vite-plus / JS layer */
+    --js-bg:#e8f1fa;
+    --vitest:#5a8f29;      /* upstream Vitest */
+    --vitest-bg:#eef5e3;
+    --inv:#8a3ffc;         /* the single-instance invariant */
+    --inv-bg:#f1e9ff;
+    --warn:#b5851a;        /* warning / soft */
+    --warn-bg:#fbf3dd;
+    --err:#c0392b;         /* hard fail / high risk */
+    --err-bg:#fae9e7;
+    --ok:#2f8f5b; --ok-bg:#e6f4ec;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 28px 80px}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em}
+  h1{font-size:27px;line-height:1.25;margin:0 0 6px;letter-spacing:-.01em}
+  h2{font-size:19px;margin:48px 0 14px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px}
+  h2 .n{font:600 12px/1 ui-monospace,monospace;color:#fff;background:var(--ink);
+        width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center}
+  h3{font-size:15px;margin:22px 0 8px}
+  p{margin:9px 0}
+  a{color:var(--js);text-decoration:none;border-bottom:1px solid #cdddee}
+  a:hover{border-color:var(--js)}
+  .src a,.f a{color:inherit;border-bottom:1px dotted currentColor;opacity:1}
+  .src a:hover,.f a:hover{border-bottom-style:solid}
+  .files .row .pth a{color:var(--js);border-bottom:1px solid #cdddee}
+  .sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+  .meta{color:var(--muted);font-size:12.5px;margin-top:14px;line-height:1.9}
+  .meta code{background:#f0efea;padding:1px 5px;border-radius:4px}
+  .lead{font-size:16px;background:#fff;border:1px solid var(--line);border-left:4px solid var(--inv);
+        border-radius:8px;padding:16px 18px;margin:22px 0 8px}
+  .lead b{color:var(--inv)}
+
+  /* legend */
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}
+  .tok{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;border:1px solid var(--line);
+       background:#fff;border-radius:999px;padding:5px 11px 5px 9px}
+  .dot{width:11px;height:11px;border-radius:3px;flex:none}
+  .d-rust{background:var(--rust)} .d-js{background:var(--js)} .d-vitest{background:var(--vitest)}
+  .d-inv{background:var(--inv)} .d-warn{background:var(--warn)} .d-err{background:var(--err)}
+
+  /* flow diagram */
+  .diagram{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 6px 2px;margin:14px 0}
+  .lane{display:grid;grid-template-columns:118px 1fr;gap:0;border-top:1px solid var(--line)}
+  .lane:first-child{border-top:0}
+  .lane-h{font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;
+          color:var(--muted);padding:16px 10px;border-right:1px solid var(--line);display:flex;align-items:center}
+  .lh-rust{color:var(--rust)} .lh-js{color:var(--js)} .lh-vitest{color:var(--vitest)}
+  .lane-b{padding:14px 14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+  .node{border-radius:7px;padding:8px 11px;font-size:13px;border:1px solid}
+  .node .t{font-weight:600}
+  .node .f{display:block;font-size:11px;margin-top:2px}
+  .n-rust{background:var(--rust-bg);border-color:#eccab4;color:#7a3415}
+  .n-js{background:var(--js-bg);border-color:#bcd5ec;color:#1d4d80}
+  .n-vitest{background:var(--vitest-bg);border-color:#cbe0ad;color:#3d641c}
+  .n-rust .f,.n-js .f,.n-vitest .f{color:inherit;opacity:.72;font-family:ui-monospace,monospace}
+  .arr{color:var(--muted);font-size:17px;line-height:1}
+  .arr-d{color:var(--muted);font-size:13px;width:100%;padding-left:2px}
+
+  /* generic cards */
+  .grid{display:grid;gap:12px;margin:14px 0}
+  .g2{grid-template-columns:1fr 1fr}
+  .card{background:#fff;border:1px solid var(--line);border-radius:9px;padding:14px 15px}
+  .card h4{margin:0 0 4px;font-size:14.5px}
+  .card .src{font:11px/1.5 ui-monospace,monospace;color:var(--muted);margin-top:8px;word-break:break-all}
+
+  /* pain point rows */
+  .pp{background:#fff;border:1px solid var(--line);border-radius:9px;padding:0;margin:11px 0;overflow:hidden}
+  .pp-h{display:flex;align-items:center;gap:10px;padding:12px 15px;border-left:5px solid var(--line)}
+  .pp.inv .pp-h{border-left-color:var(--inv)}
+  .pp-id{font:600 11px/1 ui-monospace,monospace;color:var(--muted);flex:none}
+  .pp-t{font-weight:600;font-size:14.5px}
+  .pp-tags{margin-left:auto;display:flex;gap:6px;flex:none}
+  .tag{font-size:10.5px;font-weight:600;letter-spacing:.02em;padding:3px 8px;border-radius:999px;text-transform:uppercase;white-space:nowrap}
+  .t-inv{background:var(--inv-bg);color:#6a25c9}
+  .t-pnpm{background:#eef0f2;color:#555}
+  .t-type{background:#eef0f2;color:#555}
+  .t-act{background:var(--err-bg);color:var(--err)}
+  .pp-b{padding:4px 15px 14px;font-size:13.5px;color:#332f2b}
+  .pp-b .src{font:11px/1.5 ui-monospace,monospace;color:var(--muted);margin-top:7px;word-break:break-all}
+  .pp-b .fix{margin-top:9px;padding:9px 11px;background:var(--inv-bg);border-radius:7px;font-size:12.8px}
+  .pp-b .fix b{color:#6a25c9}
+  /* mechanism load-bearing vs choice (neutral grayscale, no semantic-colour reuse) */
+  .t-forced{background:#27241f;color:#fff}
+  .t-choice{background:#fff;color:#6b6862;border:1px solid var(--line)}
+  .pp.forced .pp-h{border-left-color:var(--ink)}
+  .pp.choice .pp-h{border-left-color:#d2cec7}
+  /* import-surface table highlight for the outlier row */
+  table.v5 tr.hl td{background:var(--vitest-bg)}
+  table.v5 td .dot{display:inline-block;margin-right:6px;vertical-align:middle}
+  /* then/now vendoring history */
+  .badge{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:3px 8px;border-radius:999px;display:inline-block;margin-bottom:8px}
+  .badge-then{background:#ece9e4;color:#8a857d;text-decoration:line-through}
+  .badge-now{background:#27241f;color:#fff}
+  .tnarrow{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px;padding:2px 0}
+  .card ul{margin:6px 0 0;padding-left:18px}
+  .card ul li{font-size:12.7px;color:#332f2b;margin:2px 0}
+
+  /* follow-up list */
+  ol.fu{counter-reset:fu;list-style:none;padding:0;margin:14px 0}
+  ol.fu li{background:#fff;border:1px solid var(--line);border-radius:9px;padding:13px 15px 13px 52px;
+           position:relative;margin:9px 0}
+  ol.fu li::before{counter-increment:fu;content:counter(fu);position:absolute;left:14px;top:13px;
+           width:24px;height:24px;border-radius:6px;background:var(--ink);color:#fff;
+           font:600 12px/24px ui-monospace,monospace;text-align:center}
+  ol.fu li b{display:block;margin-bottom:2px}
+  .pri{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-left:6px}
+  .pri.hi{color:var(--err)} .pri.med{color:var(--warn)} .pri.lo{color:var(--muted)}
+
+  /* v5 matrix */
+  table.v5{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.3px;background:#fff;
+           border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  table.v5 th{background:#f4f3ee;text-align:left;padding:10px 13px;font-size:11.5px;
+              text-transform:uppercase;letter-spacing:.03em;color:var(--muted);border-bottom:1px solid var(--line)}
+  table.v5 td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.v5 tr:last-child td{border-bottom:0}
+  .pill{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;text-transform:uppercase}
+  .p-ok{background:var(--ok-bg);color:var(--ok)}
+  .p-brittle{background:var(--err-bg);color:var(--err)}
+  .p-watch{background:var(--warn-bg);color:var(--warn)}
+
+  .files{background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 4px;margin:14px 0}
+  .files .row{display:grid;grid-template-columns:300px 1fr;gap:12px;padding:8px 12px;border-top:1px solid var(--line);font-size:13px}
+  .files .row:first-child{border-top:0}
+  .files .row .pth{font:12px/1.5 ui-monospace,monospace;color:var(--js);word-break:break-all}
+  .files .row .d{color:var(--muted);font-size:12.5px}
+
+  hr.sep{border:0;border-top:1px solid var(--line);margin:40px 0 0}
+  .foot{color:var(--muted);font-size:12px;margin-top:16px}
+  @media(max-width:720px){
+    .g2{grid-template-columns:1fr}
+    .lane{grid-template-columns:84px 1fr}
+    .files .row{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Vite+ &harr; Vitest integration</h1>
+  <div class="sub">Architectural research for vitest-dev/vitest&nbsp;<b>#10635</b> — "Research and feedback for downstream integrations"</div>
+  <div class="meta">
+    Subject: <code>voidzero-dev/vite-plus</code> @ <a href="https://github.com/voidzero-dev/vite-plus/commit/2a42657724f530969805522c90c579966fbf216d"><code>2a42657</code></a> · bundles <code>vitest@4.1.9</code><br>
+    Scope: the <b>Vite+</b> target only (Cloudflare &amp; Astro are separate). Read-only research.
+  </div>
+
+  <div class="lead">
+    Vite+ is a Rust <code>vp</code> CLI that bundles Vite, Vitest, Oxlint, Oxfmt, Rolldown &amp; tsdown.
+    It does <b>not</b> fork or patch Vitest — it re-exports it and spawns its binary. Nearly all
+    integration complexity defends <b>one invariant: a single physical Vitest module instance</b>
+    across the runner, the test files, and the config. Most pain points below are facets of that
+    one problem. The only programmatic Vitest API it binds to is the <code>configureVitest</code> plugin hook.
+  </div>
+
+  <div class="legend">
+    <span class="tok"><span class="dot d-rust"></span>Rust CLI (<code>vp</code>)</span>
+    <span class="tok"><span class="dot d-js"></span>vite-plus (JS)</span>
+    <span class="tok"><span class="dot d-vitest"></span>upstream Vitest</span>
+    <span class="tok"><span class="dot d-inv"></span>single-instance invariant</span>
+    <span class="tok"><span class="dot d-warn"></span>Vitest warns / soft</span>
+    <span class="tok"><span class="dot d-err"></span>actionable / brittle</span>
+  </div>
+
+  <!-- 1 -->
+  <h2><span class="n">1</span>How <code>vp test</code> reaches Vitest</h2>
+  <p>Two parallel chains. <b>Runtime</b>: the CLI spawns the bundled Vitest binary. <b>Build/types</b>:
+  <code>vite-plus/test*</code> are generated shims that re-export <code>vitest</code>. Both are resolved
+  <b>bundle-first</b> so the spawned runner and the imported internals are the <i>same physical copy</i>.</p>
+
+  <div class="diagram">
+    <div class="lane">
+      <div class="lane-h lh-rust">Runtime path</div>
+      <div class="lane-b">
+        <span class="node n-rust"><span class="t">vp test</span><span class="f"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/crates/vite_global_cli/src/cli.rs#L917">cli.rs:917</a></span></span>
+        <span class="arr">→</span>
+        <span class="node n-rust"><span class="t">delegate to local CLI</span><span class="f"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/crates/vite_global_cli/src/commands/delegate.rs#L10">delegate.rs:10</a></span></span>
+        <span class="arr">→</span>
+        <span class="node n-js"><span class="t">vite-plus/dist/bin.js</span><span class="f"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/bin.ts#L76">bin.ts:76</a> · NAPI run({test,…})</span></span>
+        <span class="arr">→</span>
+        <span class="node n-js"><span class="t">test() resolver</span><span class="f"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/resolve-test.ts#L37">resolve-test.ts:37</a></span></span>
+        <span class="arr">→</span>
+        <span class="node n-vitest"><span class="t">spawn vitest.mjs</span><span class="f">resolveBundled('vitest') · args forwarded verbatim</span></span>
+        <div class="arr-d">Rust execs the Vitest CLI as a child process. No Vitest Node API. <code>run/watch/related/list/-t/--coverage</code> pass straight through.</div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-h lh-js">Build / types</div>
+      <div class="lane-b">
+        <span class="node n-vitest"><span class="t">vitest package.json</span><span class="f">exports map</span></span>
+        <span class="arr">→</span>
+        <span class="node n-js"><span class="t">syncTestPackageExports()</span><span class="f"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/BUNDLING.md">BUNDLING.md step 4</a> · regenerated each build</span></span>
+        <span class="arr">→</span>
+        <span class="node n-js"><span class="t">dist/test/*.js shims</span><span class="f">export * from 'vitest/&lt;subpath&gt;'</span></span>
+        <span class="arr">→</span>
+        <span class="node n-vitest"><span class="t">vite-plus/test → vitest</span><span class="f">/test/node, /test/config, /test/browser…</span></span>
+        <div class="arr-d">Drop-in alias surface, auto-tracking upstream's export names. An earlier wrapper that <b>vendored &amp; bundled the entire Vitest dist</b> was reverted in favor of this thin re-export (§5).</div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-h lh-js">Config plugins</div>
+      <div class="lane-b">
+        <span class="node n-js"><span class="t">vite-plus defineConfig</span><span class="f"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts">define-config.ts</a> · wraps user config</span></span>
+        <span class="arr">→</span>
+        <span class="node n-js"><span class="t">vitest-resolver</span><span class="f">resolveId · pre · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L163-L245">define-config.ts:163</a></span></span>
+        <span class="node n-js"><span class="t">auto-inline-matcher</span><span class="f">configResolved · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L247-L350">define-config.ts:247</a></span></span>
+        <span class="node n-js"><span class="t">coverage-version-guard</span><span class="f">custom · calls <b>configureVitest</b> (only Vitest API used) · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L378-L572">define-config.ts:378</a></span></span>
+        <div class="arr-d">Injected into root <i>and</i> recursively into every <code>test.projects</code> entry (root plugins don't propagate per-project). The <code>coverage-version-guard</code> is the <b>only custom logic Vite+ runs against a Vitest-specific hook</b> — everything else is packaging/resolution.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <h4>Black-box consumption</h4>
+      <p style="margin:4px 0 0;font-size:13.5px;color:#332f2b">Vitest is a <b>bundled dep (transitive to the user) + spawned binary + re-export</b>. Vite+ adds no runner logic — it inherits Vitest's entire CLI surface and config model.</p>
+    </div>
+    <div class="card">
+      <h4>Config lives in <code>vite.config.ts</code></h4>
+      <p style="margin:4px 0 0;font-size:13.5px;color:#332f2b">The <code>test</code> block goes in <code>vite.config.ts</code>; <code>vitest.config.ts</code> is discouraged. <code>vp test</code> relies on Vitest's own config discovery (no explicit <code>--config</code>).</p>
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/docs/guide/test.md#L23">docs/guide/test.md:23</a></div>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <h2><span class="n">2</span>The single-instance invariant — root of most pain</h2>
+  <p>Vitest splits its internals (mocks, <code>expect</code>, runner state, mock hoisting) if two physical
+  copies load. Vite+ forces the whole tree onto one copy via a package-manager override, and several
+  separate workarounds all trace back to this one root cause (marked <span class="tag t-inv" style="display:inline-block">single-instance</span>).</p>
+
+  <div class="card" style="border-left:4px solid var(--inv)">
+    <h4 style="color:#6a25c9">The pin</h4>
+    <p style="margin:4px 0 0;font-size:13.5px"><code>vitest</code> is pinned to the exact bundled version; the <code>@vitest/*</code> siblings are exact deps of <code>vitest</code>, so one pin cascades the whole family.</p>
+    <pre class="mono" style="background:#faf9f5;border:1px solid var(--line);border-radius:7px;padding:11px 13px;margin:10px 0 0;font-size:12.5px;overflow:auto">overrides:
+  vite: npm:@voidzero-dev/vite-plus-core@latest
+  vitest: 4.1.9</pre>
+    <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/utils/constants.ts#L8">constants.ts:8</a> (VITE_PLUS_OVERRIDE_PACKAGES) · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/README.md#L198">README.md:198</a></div>
+  </div>
+
+  <div class="pp inv">
+    <div class="pp-h"><span class="pp-id">G1</span><span class="pp-t">Coverage provider version skew only <i>warns</i></span>
+      <span class="pp-tags"><span class="tag t-inv">single-instance</span><span class="tag t-act">actionable</span></span></div>
+    <div class="pp-b">
+      <code>@vitest/coverage-v8</code>/<code>-istanbul</code> are project-installed peers Vite+ doesn't ship.
+      On a provider/runner version mismatch, Vitest 4.1.9 only logs <code>logger.warn</code> and then runs
+      <b>mixed versions</b> (the provider's <code>_initialize</code> warns, never throws), silently producing
+      unreliable coverage. Vite+ wrote a guard to <b>fail fast</b> — covering both startup and the late
+      <code>enableCoverage()</code> path.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L378-L572">define-config.ts:378–572</a> (vitePlusCoverageVersionGuardPlugin)</div>
+      <div class="fix"><b>Vitest follow-up:</b> upgrade coverage provider/runner mismatch from a warning to an error (or much louder). A downstream building its own hard guard is direct evidence the warning is insufficient.</div>
+    </div>
+  </div>
+
+  <div class="pp inv">
+    <div class="pp-h"><span class="pp-id">G2</span><span class="pp-t">pnpm hides transitive <code>vitest</code>/<code>@vitest/*</code> in browser mode</span>
+      <span class="pp-tags"><span class="tag t-inv">single-instance</span><span class="tag t-pnpm">pnpm</span></span></div>
+    <div class="pp-b">
+      In a project depending only on <code>vite-plus</code>, the family is transitive; pnpm's isolated layout
+      exposes only direct deps, so the browser-mode Vite dev server can't resolve <code>vitest/internal/browser</code>,
+      <code>@vitest/expect</code>, etc. The <code>vitest-resolver</code> plugin re-resolves from Vite+'s own anchors.
+      Must route through <code>this.resolve</code> (ESM conditions) — a raw <code>require.resolve</code> hits Vitest's
+      <b>CJS throw-stub</b> for the bare <code>vitest</code> root.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L163-L245">define-config.ts:163–245</a> (vitePlusVitestResolverPlugin)</div>
+      <div class="fix"><b>Vitest follow-up:</b> document pnpm-isolated browser-mode family resolution + the <code>require</code>-condition throw-stub trap; consider a resolver recipe/helper.</div>
+    </div>
+  </div>
+
+  <div class="pp inv">
+    <div class="pp-h"><span class="pp-id">G3</span><span class="pp-t"><code>expect.extend</code> matchers register on the wrong instance</span>
+      <span class="pp-tags"><span class="tag t-inv">single-instance</span></span></div>
+    <div class="pp-b">
+      When matcher packages (<code>@testing-library/jest-dom</code>, <code>@storybook/test</code>, <code>jest-extended</code>)
+      load in a different module graph than the test runtime, <code>expect.extend()</code> targets a different
+      <code>expect</code> and <code>expect(...).&lt;matcher&gt;</code> is undefined (ref vitest&nbsp;#897). Vite+ auto-appends
+      installed ones to <code>test.server.deps.inline</code>.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L247-L350">define-config.ts:247–350</a> (AUTO_INLINE_DEPS, vitePlusAutoInlineMatcherPlugin)</div>
+    </div>
+  </div>
+
+  <div class="pp inv">
+    <div class="pp-h"><span class="pp-id">G4</span><span class="pp-t">Browser provider <code>.d.ts</code> type-identity split</span>
+      <span class="pp-tags"><span class="tag t-inv">single-instance</span><span class="tag t-type">types</span><span class="tag t-pnpm">pnpm</span></span></div>
+    <div class="pp-b">
+      A plain <code>export * from '@vitest/browser-playwright'</code> d.ts makes TS resolve the provider's internal
+      <code>import { BrowserProvider } from 'vitest/node'</code> through the provider's own pnpm edge — a possibly
+      different <code>vitest</code> copy → two nominally distinct <code>BrowserProvider</code> types →
+      <code>provider: playwright()</code> fails the user's typecheck. Vite+ <b>inlines</b> the d.ts with specifiers
+      rewritten to one identity.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/BUNDLING.md#L378-L382">BUNDLING.md:378–382</a></div>
+    </div>
+  </div>
+
+  <div class="pp">
+    <div class="pp-h"><span class="pp-id">G5</span><span class="pp-t"><code>declare module 'vite'</code> augmentation doesn't reach a fork</span>
+      <span class="pp-tags"><span class="tag t-type">types</span></span></div>
+    <div class="pp-b">
+      Vitest augments <code>vite</code>'s <code>UserConfig</code> with <code>test?</code> via <code>declare module 'vite'</code>.
+      Because <code>@voidzero-dev/vite-plus-core</code> is a <b>fork</b>, the augmentation is specifier-bound and never
+      applies — Vite+ must re-declare <code>test?: VitestInlineConfig</code> itself (and cast <code>configureVitest</code> /
+      <code>ResolvedConfig.test</code>).
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L64-L73">define-config.ts:64–73</a></div>
+      <div class="fix"><b>Vitest follow-up (docs):</b> note that augmentations are bound to the literal <code>'vite'</code> specifier, so forks/aliases must re-declare.</div>
+    </div>
+  </div>
+
+  <div class="pp">
+    <div class="pp-h"><span class="pp-id">G6</span><span class="pp-t">Root plugins don't propagate to <code>test.projects</code></span>
+      <span class="pp-tags"></span></div>
+    <div class="pp-b">
+      Vitest runs an independent Vite pipeline per project. Vite+ walks every project entry shape
+      (string / object / function / Promise) and re-injects its plugins. String-glob entries can't be cloned,
+      so they get no plugin — a known residual gap that only softens the coverage guard for hand-authored glob workspaces.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts#L600-L657">define-config.ts:600–657</a></div>
+      <div class="fix"><b>Vitest follow-up (lower priority):</b> a supported "apply to all projects" plugin mechanism would delete this whole recursion class.</div>
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <h2><span class="n">3</span>Suggested Vitest-side follow-ups</h2>
+  <ol class="fu">
+    <li><b>Coverage mismatch → error <span class="pri hi">high</span></b>Make provider/runner version skew fail (or far louder). Direct evidence: G1, a downstream built its own hard guard. Cleanest actionable item.</li>
+    <li><b>Document the single-instance contract <span class="pri med">med</span></b>Spell out the "one physical Vitest" requirement and/or add duplicate-instance detection with a clear error. Shrinks the workaround surface behind G1–G4 for <i>every</i> integrator.</li>
+    <li><b>Document pnpm browser-mode resolution <span class="pri med">med</span></b>Cover family resolution under isolated layout + the <code>require</code>-condition CJS throw-stub trap (G2). Maybe a small resolver helper.</li>
+    <li><b>Document specifier-bound augmentations <span class="pri lo">low</span></b>Note that <code>declare module 'vite'</code> won't reach forks/aliases (G5).</li>
+    <li><b>"Apply to all projects" plugin API <span class="pri lo">low</span></b>Optional convenience that removes the per-project injection dance (G6).</li>
+  </ol>
+  <p class="sub">None block Vite+ today — it has working (if intricate) solutions. These are the API-surface / docs gaps the integration <i>reveals</i>.</p>
+
+  <!-- 4 -->
+  <h2><span class="n">4</span>v5 breaking-change impact</h2>
+  <p>No v5-specific handling exists at this commit (bundles <code>vitest@4.1.9</code>; migration requires "Vite 8+ and Vitest 4.1+").
+  Vite+ is resilient to <b>additive</b> export changes (auto-shimmed) but brittle to renames and to reshaping the one API it binds to.</p>
+
+  <table class="v5">
+    <thead><tr><th style="width:30%">v5 change area</th><th style="width:14%">Resilience</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Additive <code>exports</code> entries</td><td><span class="pill p-ok">resilient</span></td><td><code>vite-plus/test*</code> regenerates from upstream's export map each build — new subpaths flow through automatically.</td></tr>
+      <tr><td><code>exports</code>-map <b>renames</b></td><td><span class="pill p-brittle">brittle</span></td><td>Silently drops/renames <code>vite-plus/test/*</code> aliases, breaking user imports + the migration rewrite. Treat the export map as public contract across v4→v5.</td></tr>
+      <tr><td><code>configureVitest</code> / coverage API reshape</td><td><span class="pill p-brittle">brittle</span></td><td>The coverage guard binds to <code>configureVitest → vitest.config.coverage</code>, <code>vitest.config.root</code>, <code>vitest.enableCoverage()</code>. The single highest-risk v5 touchpoint.</td></tr>
+      <tr><td><code>@vitest/browser*</code> package reorg</td><td><span class="pill p-brittle">brittle</span></td><td>Three providers + their two-alias surfaces are hard-coded in shim generation and the migrator's override/peer logic.</td></tr>
+      <tr><td>Default coverage provider change</td><td><span class="pill p-watch">watch</span></td><td>Guard assumes unset <code>provider</code> defaults to <code>v8</code>; a default change mis-detects.</td></tr>
+      <tr><td>Export-condition layout change</td><td><span class="pill p-watch">watch</span></td><td>G2's workaround assumes bare <code>vitest</code> <code>require</code> = throw-stub and ESM behind <code>import</code>/<code>node</code>.</td></tr>
+      <tr><td><code>@vitest/*</code> sibling versioning</td><td><span class="pill p-watch">watch</span></td><td>Single-pin cascade relies on siblings being exact deps of <code>vitest</code>. If decoupled, the pin no longer cascades.</td></tr>
+    </tbody>
+  </table>
+  <p class="sub"><b>Bottom line:</b> if v5 plans export renames, <code>configureVitest</code>/coverage reshaping, or browser-provider repackaging, Vite+ is a concrete downstream to coordinate with.</p>
+
+  <!-- 5 -->
+  <h2><span class="n">5</span>Architecture rationale — necessary vs. packaging choice</h2>
+  <p>Fact-based decomposition. The integration is three <i>separable</i> mechanisms. Only the first is technically forced; the re-export model is a product choice ("one dependency") that generates most of §2's resolution pain.</p>
+
+  <div class="pp forced">
+    <div class="pp-h"><span class="pp-id">M1</span><span class="pp-t">The <code>vite</code> override → fork redirection</span>
+      <span class="pp-tags"><span class="tag t-forced">load-bearing</span></span></div>
+    <div class="pp-b">
+      Vite+'s "vite" is the fork <code>@voidzero-dev/vite-plus-core</code>, aliased over the <code>vite</code> specifier. Vitest imports <code>vite</code>, so this alias must be <b>tree-wide</b> for Vitest to run on the fork. An overrides block therefore exists regardless of how <code>vitest</code> is delivered.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/utils/constants.ts#L11">constants.ts:11</a></div>
+    </div>
+  </div>
+
+  <div class="pp forced">
+    <div class="pp-h"><span class="pp-id">M2</span><span class="pp-t">The <code>vitest</code> pin in the same override → tree-wide dedup</span>
+      <span class="pp-tags"><span class="tag t-inv">single-instance</span></span></div>
+    <div class="pp-b">
+      An override forces the <i>entire</i> tree (incl. transitive / other-workspace copies) onto one <code>vitest</code>; a plain <code>devDependencies</code> entry governs only the project's own direct dep. The two are <b>composable</b> — a direct dep + an override can coexist. This is what a re-export-free integration would still keep.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/README.md#L198">README.md:198</a></div>
+    </div>
+  </div>
+
+  <div class="pp choice">
+    <div class="pp-h"><span class="pp-id">M3</span><span class="pp-t"><code>vite-plus/test*</code> re-export + transitive <code>vitest</code></span>
+      <span class="pp-tags"><span class="tag t-choice">packaging choice</span></span></div>
+    <div class="pp-b">
+      Makes <code>vitest</code> a <b>non-declared (transitive)</b> dependency so users install only <code>vite-plus</code>. This is the "single dependency" product shape — and the direct cause of the transitive-only resolution work (G2 resolver plugin, G4 provider <code>.d.ts</code>). Vite+ already drops it for <b>browser mode</b>, where the migrator adds a direct <code>vitest</code> devDependency.
+      <div class="src"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/docs/guide/migrate.md#L99">migrate.md:99</a> · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/migration/__tests__/migrator.spec.ts#L591">migrator.spec.ts:591</a></div>
+    </div>
+  </div>
+
+  <h3>Why it bites for Vitest only — the import-surface spectrum</h3>
+  <p>The bundled tools fall into three tiers by user-facing import surface. Only <b>Tier A</b> (Vitest) is imported pervasively in user <i>source</i>. Vite+ never names this asymmetry — its docs frame every re-export uniformly as a "thin re-export / drop-in for vite" — yet the resolution complexity lands entirely on this one high-frequency specifier.</p>
+  <table class="v5">
+    <thead><tr><th style="width:9%">Tier</th><th style="width:13%">Tool</th><th style="width:33%"><code>vite-plus</code> surface</th><th style="width:23%">User-facing imports</th><th>Frequency</th></tr></thead>
+    <tbody>
+      <tr class="hl"><td><b>A</b><br><span style="font-size:10.5px;color:var(--muted)">per-file runtime</span></td><td><span class="dot d-vitest"></span><b>Vitest</b></td><td>full <code>export * from 'vitest/*'</code> runtime API</td><td><code>describe</code>/<code>it</code>/<code>expect</code>/<code>vi</code> in test files</td><td><b>Per-test-file, hand-written, throughout the suite</b></td></tr>
+      <tr><td><b>B</b><br><span style="font-size:10.5px;color:var(--muted)">config / plugin API</span></td><td>Vite</td><td><code>vite-plus</code>, <code>/client</code>, <code>/types/*</code></td><td><code>defineConfig</code>, plugin types, <code>vite/client</code> ambient</td><td>Config + occasional plugin authoring; ambient set-once</td></tr>
+      <tr><td>B</td><td>tsdown</td><td><code>vite-plus/pack</code>, <code>/pack/client</code>, core <code>./lib</code>; family <code>@tsdown/css</code>·<code>@tsdown/exe</code></td><td><code>pack</code>/<code>css</code> config + types; <code>build()</code></td><td>Config / build-time (libs)</td></tr>
+      <tr><td>B</td><td>Rolldown</td><td>native binding <code>vite-plus/binding</code>; plugin API on core</td><td>plugin authoring (mostly via Vite)</td><td>Plugin / build-time</td></tr>
+      <tr><td><b>C</b><br><span style="font-size:10.5px;color:var(--muted)">config / CLI only</span></td><td>Oxlint</td><td><code>vite-plus/lint</code> = <code>export type *</code> — <b>types only</b></td><td>none</td><td>Zero source imports</td></tr>
+      <tr><td>C</td><td>Oxfmt</td><td><code>vite-plus/fmt</code> = single <code>format</code> fn</td><td>none</td><td>Zero source imports</td></tr>
+      <tr><td>C</td><td>Vite Task</td><td>none (<code>run</code> block)</td><td>none</td><td>Zero source imports</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">Implementation encodes the asymmetry even though the docs don't: <code>lint</code> re-exports oxlint <b>types</b>, <code>fmt</code> one <b>function</b>, <code>test</code> the <b>whole runtime API</b> — and only <code>test</code> needs the resolver plugin (G2) and inlined provider <code>.d.ts</code> (G4).</p>
+
+  <div class="card" style="border-left:4px solid var(--vitest)">
+    <h4>Corroboration — tsdown has the <i>same</i> family hazard, but it's resolvable</h4>
+    <p style="margin:4px 0 0;font-size:13.3px;color:#332f2b">tsdown's CSS/exe support ships as <code>@tsdown/css</code> / <code>@tsdown/exe</code>, which hard-peer-depend on <code>tsdown</code> and import <code>tsdown/internal</code>. Against Vite+'s bundled tsdown (no resolvable top-level <code>tsdown</code>) a project install fails — the <b>same shape as G2</b> (<code>@vitest/*</code> → <code>vitest/internal/*</code>) — and <code>lightningcss</code> is an unbundlable optional peer (like <code>playwright</code>/<code>webdriverio</code>).</p>
+    <p style="margin:8px 0 0;font-size:13.3px;color:#332f2b"><b>But Vite+ resolves it completely:</b> it <b>bundles the extensions into core</b> (<code>tsdown-exe.js</code>/<code>tsdown-css.js</code>) so <code>tsdown/internal</code> resolves at build time (<a href="https://github.com/voidzero-dev/vite-plus/commit/662787671b1f9c3b62eb1fe023c3a32132b040f3">PR #1919</a>). That works because tsdown's extension set is <b>finite, build-time, toolchain-controlled</b>. Vitest's family is <b>open-ended, runtime, and user-imported per-file</b> — you can't pre-bundle every provider, nor remove the user's <code>import … from 'vitest'</code> — which is exactly why the same trick fails and G1–G4 exist.</p>
+  </div>
+
+  <h3>History — Vite+ once vendored &amp; bundled the entire Vitest, then reverted</h3>
+  <p>The thin re-export is the <b>second</b> approach. Direct evidence the maximal "make Vitest fully ours" path was attempted and abandoned.</p>
+  <div class="grid g2">
+    <div class="card tn">
+      <span class="badge badge-then">Then — reverted</span>
+      <h4><code>@voidzero-dev/vite-plus-test</code></h4>
+      <p style="margin:4px 0 0;font-size:13px;color:#332f2b">A dedicated package that <b>vendored &amp; bundled Vitest's dist</b> (hybrid strategy):</p>
+      <ul>
+        <li><b>Copy</b> 11 <code>@vitest/*</code> packages verbatim (not bundled — preserve browser/Node split)</li>
+        <li><b>Rolldown-bundle</b> leaf deps (<code>chai</code>, <code>pathe</code>, …) into <code>dist/vendor/</code></li>
+        <li><code>EXTERNAL_BLOCKLIST</code> + browser-optimizer exclude list</li>
+        <li><code>brandVitest()</code> string-patched the cac chunk: <code>cac("vitest")</code> → <code>cac("vp test")</code></li>
+      </ul>
+    </div>
+    <div class="card tn">
+      <span class="badge badge-now">Now — current</span>
+      <h4>Thin re-export of upstream <code>vitest</code></h4>
+      <p style="margin:4px 0 0;font-size:13px;color:#332f2b"><a href="https://github.com/voidzero-dev/vite-plus/commit/342fd2f447c25ddec1e012debbba2e088e644eb0">PR #1588 / <code>342fd2f4</code></a> deleted the wrapper. The wrapper's only structural job — redirect Vitest's <code>vite</code> import to the fork — "is now handled cleanly by package-manager overrides, so the bundle was <b>dead weight that lagged upstream releases</b>."</p>
+      <p style="margin:8px 0 0;font-size:13px;color:#332f2b"><b>Tradeoff:</b> loss of CLI rebranding — <code>vp test</code> now shows Vitest's native banner (<code>vitest/&lt;semver&gt;</code>). Per §2/§5 the only thing the heavy wrapper bought over the thin re-export is <b>branding</b>.</p>
+    </div>
+  </div>
+  <p class="sub"><b>Why vendoring Vitest is uniquely hard:</b> the copy-not-bundle rule existed because Rolldown shared chunks mixed Node-only and browser code and crashed; the browser/Node entry split, blocklist, and optimizer excludes all exist because Vitest is a <b>runtime, browser/Node-split, plugin-extensible library</b> — not a config-once CLI like Oxlint/Oxfmt (which need no vendoring at all). The history empirically confirms what the import-surface spectrum predicts.</p>
+
+  <!-- key files -->
+  <h2><span class="n">6</span>Key files</h2>
+  <div class="files">
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/BUNDLING.md">packages/cli/BUNDLING.md</a></span><span class="d">Shim / re-export build architecture (steps 3 &amp; 4).</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/define-config.ts">packages/cli/src/define-config.ts</a></span><span class="d">The 3 injected plugins + coverage guard + lazyPlugins.</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/resolve-test.ts">packages/cli/src/resolve-test.ts</a></span><span class="d">Bundle-first Vitest binary resolution for <code>vp test</code>.</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/utils/constants.ts">packages/cli/src/utils/constants.ts</a></span><span class="d">VITEST_VERSION, overrides, resolveBundled rationale.</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/packages/cli/src/bin.ts">packages/cli/src/bin.ts</a></span><span class="d">JS entry; NAPI <code>run({...resolvers, args})</code>.</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/crates/vite_global_cli/src/commands/delegate.rs">crates/vite_global_cli/src/commands/delegate.rs</a></span><span class="d">Rust → local-CLI delegation.</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/rfcs/cli-output-polish.md">rfcs/cli-output-polish.md</a></span><span class="d">History of the reverted bundled-wrapper approach.</span></div>
+    <div class="row"><span class="pth"><a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/docs/guide/migrate.md">migrate</a> · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/docs/guide/upgrade.md">upgrade</a> · <a href="https://github.com/voidzero-dev/vite-plus/blob/2a42657724f530969805522c90c579966fbf216d/docs/guide/test.md">test</a> guides</span><span class="d">User-facing Vitest integration + pin/upgrade docs.</span></div>
+  </div>
+
+  <hr class="sep">
+  <p class="foot">Research artifact for vitest #10635 · subject voidzero-dev/vite-plus @ 2a42657 · all claims verified against source. Line numbers are at the analyzed commit.</p>
+
+</div>
+</body>
+</html>
