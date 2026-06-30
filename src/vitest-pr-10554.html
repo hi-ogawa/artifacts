@@ -6,32 +6,33 @@
 <title>Vitest PR #10554 — Config Resolution vs Server Creation</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --panel: #161b22;
-    --panel2: #1c2430;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --red: #f85149;
-    --amber: #d29922;
-    --purple: #bc8cff;
-    --pink: #f778ba;
+    --bg: #fbfbf9;
+    --panel: #ffffff;
+    --panel2: #f4f3ee;
+    --border: #e3e1db;
+    --text: #1c1b1a;
+    --muted: #6b6862;
+    --accent: #2f6fb3;
+    --green: #2f8f5b;
+    --red: #c0392b;
+    --amber: #b5851a;
+    --purple: #8a3ffc;
+    --pink: #b83280;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: radial-gradient(1200px 600px at 50% -10%, #16263b 0%, var(--bg) 55%);
+    background: var(--bg);
     color: var(--text);
-    line-height: 1.45;
-    padding: 32px 20px 80px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding: 40px 20px 80px;
   }
   header {
     max-width: 1180px;
     margin: 0 auto 28px;
-    text-align: center;
+    text-align: left;
   }
   header .tag {
     display: inline-block;
@@ -47,7 +48,8 @@
   }
   header h1 {
     margin: 0 0 6px;
-    font-size: 26px;
+    font-size: 27px;
+    letter-spacing: -.01em;
   }
   header p {
     margin: 0;
@@ -91,8 +93,8 @@
     border-radius: 6px;
     letter-spacing: .04em;
   }
-  .pill.before { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.4); }
-  .pill.after  { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.4); }
+  .pill.before { background: #fae9e7; color: var(--red); border: 1px solid #ecc6c2; }
+  .pill.after  { background: #e6f4ec; color: var(--green); border: 1px solid #c2e2cf; }
 
   .node {
     position: relative;
@@ -125,7 +127,7 @@
   .node .file {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
-    color: #6e7681;
+    color: var(--muted);
     margin-top: 6px;
   }
   .arrow {
@@ -138,11 +140,11 @@
   .arrow svg { display: block; }
 
   /* accent variants */
-  .node.config { border-color: rgba(188,140,255,.55); box-shadow: 0 0 0 1px rgba(188,140,255,.12) inset; }
-  .node.server { border-color: rgba(88,166,255,.55); box-shadow: 0 0 0 1px rgba(88,166,255,.12) inset; }
-  .node.harness { border-color: rgba(247,120,186,.55); box-shadow: 0 0 0 1px rgba(247,120,186,.12) inset; }
+  .node.config { border-color: #d7c4f5; background: #f6f1ff; }
+  .node.server { border-color: #bcd5ec; background: #eef5fb; }
+  .node.harness { border-color: #f0c4df; background: #fdf0f7; }
   .node.entry { border-color: var(--border); background: var(--panel2); }
-  .node.problem { border-style: dashed; border-color: rgba(210,153,34,.6); }
+  .node.problem { border-style: dashed; border-color: #e3c98f; }
 
   .badge {
     margin-left: auto;
@@ -153,10 +155,10 @@
     text-transform: uppercase;
     letter-spacing: .05em;
   }
-  .badge.cfg { background: rgba(188,140,255,.16); color: var(--purple); }
-  .badge.srv { background: rgba(88,166,255,.16); color: var(--accent); }
-  .badge.hrn { background: rgba(247,120,186,.16); color: var(--pink); }
-  .badge.warn { background: rgba(210,153,34,.16); color: var(--amber); }
+  .badge.cfg { background: #f1e9ff; color: #6a25c9; }
+  .badge.srv { background: #e8f1fa; color: #1d4d80; }
+  .badge.hrn { background: #fbe9f4; color: #a3257a; }
+  .badge.warn { background: #fbf3dd; color: var(--amber); }
 
   /* Vite server instance — ONE consistent token used everywhere a real server exists */
   .server-chip {
@@ -167,21 +169,21 @@
     font-size: 12px;
     font-weight: 700;
     letter-spacing: .02em;
-    color: #d6ecff;
-    background: linear-gradient(180deg, rgba(88,166,255,.26), rgba(88,166,255,.08));
-    border: 1.5px solid rgba(88,166,255,.72);
+    color: #1d4d80;
+    background: #e8f1fa;
+    border: 1.5px solid #9cc1e6;
     border-radius: 9px;
     padding: 7px 12px;
-    box-shadow: inset 0 0 0 1px rgba(88,166,255,.10), 0 3px 10px rgba(88,166,255,.14);
+    box-shadow: none;
     white-space: nowrap;
   }
   .server-chip .ico { width: 16px; height: 16px; flex: none; color: var(--accent); }
-  .server-chip .sub { color: #9ec5f0; font-weight: 600; opacity: .85; }
+  .server-chip .sub { color: #5680a8; font-weight: 600; opacity: .9; }
   /* a server that no longer exists in the "after" world */
   .server-chip.gone {
     color: var(--muted);
-    border: 1.5px dashed rgba(248,81,73,.55);
-    background: rgba(248,81,73,.06);
+    border: 1.5px dashed #d8a39c;
+    background: #fbeeec;
     box-shadow: none;
   }
   .server-chip.gone .ico { color: var(--red); }
@@ -213,7 +215,7 @@
     border-bottom: 1px solid var(--border);
     vertical-align: top;
   }
-  .summary th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .summary th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; background: var(--panel2); }
   .summary td:first-child { color: var(--text); font-weight: 600; width: 26%; }
   .summary .b { color: var(--red); }
   .summary .a { color: var(--green); }
@@ -221,8 +223,9 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12px; background: var(--panel2); padding: 1px 5px; border-radius: 4px;
   }
-  footer { max-width: 1180px; margin: 26px auto 0; color: #6e7681; font-size: 12px; text-align: center; }
+  footer { max-width: 1180px; margin: 26px auto 0; color: var(--muted); font-size: 12px; text-align: center; }
   footer a { color: var(--accent); text-decoration: none; }
+  .node .desc code, .note code, .summary p code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
 </style>
 </head>
 <body>
