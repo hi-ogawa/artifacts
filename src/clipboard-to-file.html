@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clipboard to File</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #111;
+    background: #f7f7f4;
+  }
+  main {
+    width: min(860px, calc(100vw - 32px));
+    padding: 24px;
+    border: 1px solid #ddd8ca;
+    border-radius: 18px;
+    background: #fffef9;
+  }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  p {
+    margin: 0;
+    color: #666;
+    line-height: 1.6;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 22px 0 14px;
+  }
+  button {
+    border: 1px solid #c9c2b3;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font: inherit;
+    color: #111;
+    background: #fff;
+    cursor: pointer;
+  }
+  button:disabled {
+    color: #999;
+    background: #f1f1ec;
+    cursor: not-allowed;
+  }
+  button:not(:disabled):hover { background: #f6f1e6; }
+  textarea {
+    width: 100%;
+    min-height: min(58vh, 560px);
+    resize: vertical;
+    border: 1px solid #ddd8ca;
+    border-radius: 12px;
+    padding: 14px;
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #111;
+    background: #fff;
+  }
+  #status {
+    min-height: 24px;
+    margin-top: 12px;
+    color: #0969da;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+  <main>
+    <h1>Clipboard to file</h1>
+    <p>Paste clipboard text, optionally edit it, then download it as a timestamped .txt file.</p>
+    <div class="controls">
+      <button id="paste" type="button">Paste from Clipboard</button>
+      <button id="download" type="button" disabled>Save as File</button>
+    </div>
+    <textarea id="text" spellcheck="false" placeholder="Paste text here, or use the clipboard button above."></textarea>
+    <div id="status" aria-live="polite"></div>
+  </main>
+<script>
+  const paste = document.getElementById("paste");
+  const download = document.getElementById("download");
+  const text = document.getElementById("text");
+  const status = document.getElementById("status");
+
+  function timestamp() {
+    return new Date().toISOString().slice(0, 19).replace(/:/g, "-").replace("T", "_");
+  }
+
+  function updateDownloadState() {
+    download.disabled = text.value.length === 0;
+  }
+
+  function downloadText(filename) {
+    const blob = new Blob([text.value], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function pasteFromClipboard() {
+    paste.disabled = true;
+    status.textContent = "Reading clipboard...";
+
+    try {
+      const value = await navigator.clipboard.readText();
+      if (!value) {
+        status.textContent = "Clipboard text is empty.";
+        return;
+      }
+
+      text.value = value;
+      updateDownloadState();
+      text.focus();
+      status.textContent = `Pasted ${value.length.toLocaleString()} characters.`;
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Clipboard read failed.";
+    } finally {
+      paste.disabled = false;
+    }
+  }
+
+  paste.addEventListener("click", pasteFromClipboard);
+  download.addEventListener("click", () => {
+    if (!text.value) return;
+    const filename = `clipboard_${timestamp()}.txt`;
+    downloadText(filename);
+    status.textContent = `Downloaded ${filename}.`;
+  });
+  text.addEventListener("input", updateDownloadState);
+</script>
+</body>
+</html>
