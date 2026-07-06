@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vite SSR sourcemap fix &mdash; call-site column alignment (PR #22829)</title>
+<style>
+  :root{
+    --ink:#1b1f24; --muted:#5b6672; --line:#d8dee6; --bg:#fbfcfd; --panel:#ffffff;
+    --blue:#1f6feb; --blue-bg:#e7f0ff; --red:#d1242f; --red-bg:#ffeef0;
+    --gray:#8a94a0; --gray-bg:#eef1f4; --good:#1a7f37; --code:#0b1220;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:920px; margin:0 auto; padding:40px 24px 72px}
+  header .kicker{font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+  h1{font-size:26px; line-height:1.25; margin:6px 0 4px}
+  .sub{color:var(--muted); margin:0 0 8px}
+  .sub a{color:var(--blue); text-decoration:none}
+  a{color:var(--blue)}
+  a:hover{text-decoration:underline}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+  code{background:#f0f2f5; border:1px solid var(--line); border-radius:4px; padding:.05em .35em; font-size:.9em}
+  h2{font-size:18px; margin:36px 0 6px}
+  p{margin:10px 0}
+  .lede{font-size:16px}
+  .callee{color:var(--blue); font-weight:600}
+  .paren{color:var(--red); font-weight:600}
+
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:18px 0 6px; padding:12px 14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px}
+  .legend .item{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted)}
+  .swatch{width:15px; height:15px; border-radius:4px; border:1.5px solid}
+  .sw-blue{background:var(--blue-bg); border-color:var(--blue)}
+  .sw-red{background:var(--red-bg); border-color:var(--red)}
+  .sw-gray{background:var(--gray-bg); border-color:var(--gray)}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px 8px; margin:14px 0}
+  .panel .tag{display:inline-block; font-size:12px; font-weight:700; letter-spacing:.04em;
+    padding:3px 9px; border-radius:999px; margin-bottom:4px}
+  .tag.before{background:var(--red-bg); color:var(--red)}
+  .tag.after{background:#e6f4ea; color:var(--good)}
+  .panel .note{color:var(--muted); font-size:13.5px; margin:2px 0 6px}
+
+  .stage{position:relative; width:540px; max-width:100%; height:300px; margin:6px auto 2px}
+  .blk{position:absolute; height:30px; display:flex; align-items:center; justify-content:center;
+    border-radius:6px; border:1.5px solid; font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:13px; white-space:nowrap; padding:0 4px}
+  .blk small{font-size:10px}
+  .b-blue{background:var(--blue-bg); border-color:var(--blue); color:#0a3d91}
+  .b-red{background:var(--red-bg); border-color:var(--red); color:var(--red); font-weight:700}
+  .b-gray{background:var(--gray-bg); border-color:var(--gray); color:#48505a}
+  .cell{position:absolute; width:40px; height:30px; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--line); border-radius:6px; background:#fff;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px}
+  .cell.hl-callee{border-color:var(--blue); background:var(--blue-bg); color:#0a3d91; font-weight:700}
+  .cell.hl-paren{border-color:var(--red); background:var(--red-bg); color:var(--red); font-weight:700}
+  .collab{position:absolute; width:40px; text-align:center; font-size:11px; color:var(--muted)}
+  .rowlab{position:absolute; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--muted); font-weight:600}
+  .badge{position:absolute; font-size:11px; background:#fff8e6; border:1px solid #e2c766;
+    color:#7a5b00; border-radius:6px; padding:2px 6px; white-space:nowrap}
+  svg{position:absolute; inset:0; overflow:visible; pointer-events:none}
+  .result{font-size:13.5px; margin:4px 0 14px; padding:8px 12px; border-radius:8px}
+  .result.bad{background:var(--red-bg); color:#7a1620}
+  .result.good{background:#e6f4ea; color:#0f5c28}
+  .result b{font-variant-numeric:tabular-nums}
+
+  .v8{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:14px 0}
+  .codeblock{background:var(--code); color:#e6edf3; border-radius:10px; padding:14px 16px; margin:12px 0;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.6;
+    overflow-x:auto; white-space:pre}
+  .codeblock .cmt{color:#8b98a5}
+  .codeblock .kw{color:#ff9e64}
+  .codeblock .fn{color:#7ee787}
+  .codeblock .hlblue{color:#79c0ff; font-weight:700}
+  .codeblock .hlred{color:#ff7b72; font-weight:700}
+  .srcref{font-size:12px; color:var(--muted); margin:2px 0 0}
+  table.disc{border-collapse:collapse; width:100%; margin:14px 0 4px; font-size:13px}
+  table.disc th,table.disc td{border:1px solid var(--line); padding:7px 10px; text-align:left; vertical-align:top}
+  table.disc th{background:#f4f6f9; font-weight:600; color:var(--muted); font-size:12px}
+  table.disc td code{font-size:12px}
+  .yes{color:var(--good); font-weight:600}
+  .no{color:var(--red); font-weight:600}
+  .exception{background:var(--panel); border:1px dashed var(--line); border-radius:12px; padding:16px 20px; margin:14px 0}
+  .foot{margin-top:34px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:13px}
+  .foot code{font-size:12px}
+  @media (max-width:560px){ .stage{transform-origin:top left} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">vitejs/vite &middot; <a href="https://github.com/vitejs/vite/pull/22829">PR #22829</a> &middot; fixes <a href="https://github.com/vitejs/vite/issues/19625">#19625</a></div>
+    <h1>Aligning SSR call-site stack-trace columns with Node</h1>
+    <p class="sub">A one-chunk magic-string shift in <code>ssrTransform.ts</code> &mdash; the emitted code is byte-identical, only the sourcemap moves.</p>
+  </header>
+
+  <p class="lede">
+    When SSR transform rewrites a call to an imported binding, it wraps the callee as
+    <code>(0,&hellip;)</code> to avoid binding <code>this</code>. V8 anchors the stack frame of a
+    <em>parenthesized callee</em> to the <span class="paren">argument-list <code>(</code></span>, not to the
+    callee. So the reported column depends on where that <code>(</code> maps back to in the source.
+    The fix folds the <code>(</code> into the same replacement chunk that starts at the
+    <span class="callee">callee</span>, so it inherits the callee&rsquo;s column.
+  </p>
+
+  <p>Example source (only line 2 matters):</p>
+  <p class="mono" style="background:#f0f2f5;border:1px solid var(--line);border-radius:8px;padding:10px 14px">
+    <span style="color:var(--muted)">1&nbsp;&nbsp;</span>import { fn } from 'vue'<br>
+    <span style="color:var(--muted)">2&nbsp;&nbsp;</span><span class="callee">fn</span><span class="paren">(</span>1)
+  </p>
+
+  <div class="legend">
+    <div class="item"><span class="swatch sw-blue"></span> chunk maps to <b>callee start (col&nbsp;0)</b> &mdash; the desired anchor</div>
+    <div class="item"><span class="swatch sw-red"></span> maps to <b>the <code>(</code> (col&nbsp;2)</b> &mdash; the bug</div>
+    <div class="item"><span class="swatch sw-gray"></span> untouched passthrough</div>
+  </div>
+
+  <!-- ============ BEFORE ============ -->
+  <div class="panel">
+    <span class="tag before">BEFORE</span>
+    <div class="note">Three separate edits: <code>update</code> the callee &middot; <code>prependRight('(0,')</code> &middot; <code>appendLeft(')')</code>. The original <code>(1)</code> is left <em>untouched</em>, so the <code>(</code> maps to its own column&nbsp;2.</div>
+    <div class="stage" id="before">
+      <svg viewBox="0 0 540 300" aria-hidden="true">
+        <defs>
+          <marker id="ah-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1f6feb"/></marker>
+          <marker id="ah-red" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#d1242f"/></marker>
+          <marker id="ah-gray" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a94a0"/></marker>
+        </defs>
+        <!-- gray lines -->
+        <line x1="308" y1="68" x2="420" y2="212" stroke="#8a94a0" stroke-width="1.2" marker-end="url(#ah-gray)"/>
+        <line x1="364" y1="68" x2="460" y2="212" stroke="#8a94a0" stroke-width="1.2" marker-end="url(#ah-gray)"/>
+        <line x1="392" y1="68" x2="500" y2="212" stroke="#8a94a0" stroke-width="1.2" marker-end="url(#ah-gray)"/>
+        <!-- blue lines to col0 -->
+        <line x1="52"  y1="68" x2="340" y2="212" stroke="#1f6feb" stroke-width="1.4" marker-end="url(#ah-blue)"/>
+        <line x1="185" y1="68" x2="340" y2="212" stroke="#1f6feb" stroke-width="1.4" marker-end="url(#ah-blue)"/>
+        <!-- RED: the arg paren maps to col2 -->
+        <line x1="336" y1="68" x2="420" y2="212" stroke="#d1242f" stroke-width="2.6" marker-end="url(#ah-red)"/>
+      </svg>
+
+      <div class="rowlab" style="left:0; top:12px">generated</div>
+      <div class="blk b-blue" style="left:30px; width:44px; top:36px">(0,</div>
+      <div class="blk b-blue" style="left:80px; width:210px; top:36px">__vite_ssr_import_0__.fn</div>
+      <div class="blk b-gray" style="left:296px; width:24px; top:36px">)</div>
+      <div class="blk b-red"  style="left:324px; width:24px; top:36px">(</div>
+      <div class="blk b-gray" style="left:352px; width:24px; top:36px">1</div>
+      <div class="blk b-gray" style="left:380px; width:24px; top:36px">)</div>
+      <div class="badge" style="left:250px; top:2px">V8 anchors frame here &rarr; the <code>(</code></div>
+
+      <div class="rowlab" style="left:0; top:190px">source</div>
+      <div class="cell hl-callee" style="left:320px; top:214px">f</div>
+      <div class="cell hl-callee" style="left:360px; top:214px">n</div>
+      <div class="cell hl-paren"  style="left:400px; top:214px">(</div>
+      <div class="cell" style="left:440px; top:214px">1</div>
+      <div class="cell" style="left:480px; top:214px">)</div>
+      <div class="collab" style="left:320px; top:248px">col 0</div>
+      <div class="collab" style="left:360px; top:248px">1</div>
+      <div class="collab" style="left:400px; top:248px">2</div>
+      <div class="collab" style="left:440px; top:248px">3</div>
+      <div class="collab" style="left:480px; top:248px">4</div>
+    </div>
+    <div class="result bad">V8 frame &rarr; source <b>col&nbsp;2</b> &rarr; reports <b>2:3</b> &nbsp;&mdash;&nbsp; points at <code>(</code>. <b>Mismatch with Node.</b></div>
+  </div>
+
+  <!-- ============ AFTER ============ -->
+  <div class="panel">
+    <span class="tag after">AFTER</span>
+    <div class="note">One edit: <code>s.update(id.start, argsStart, "(0,binding)" + code.slice(id.end, argsStart))</code>. The chunk now spans original <code>fn(</code> (cols&nbsp;0&ndash;2), so <em>everything in it &mdash; including the <code>(</code> &mdash; maps to the chunk start, col&nbsp;0</em>.</div>
+    <div class="stage" id="after">
+      <svg viewBox="0 0 540 300" aria-hidden="true">
+        <defs>
+          <marker id="ah-blue2" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#1f6feb"/></marker>
+          <marker id="ah-gray2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a94a0"/></marker>
+        </defs>
+        <line x1="364" y1="68" x2="460" y2="212" stroke="#8a94a0" stroke-width="1.2" marker-end="url(#ah-gray2)"/>
+        <line x1="392" y1="68" x2="500" y2="212" stroke="#8a94a0" stroke-width="1.2" marker-end="url(#ah-gray2)"/>
+        <!-- the whole merged chunk (incl the paren edge) folds to col0 -->
+        <line x1="300" y1="68" x2="340" y2="212" stroke="#1f6feb" stroke-width="2.6" marker-end="url(#ah-blue2)"/>
+        <line x1="175" y1="68" x2="340" y2="212" stroke="#1f6feb" stroke-width="1.4" marker-end="url(#ah-blue2)"/>
+      </svg>
+
+      <div class="rowlab" style="left:0; top:12px">generated</div>
+      <!-- merged block; the trailing ( is drawn as an inset to show it's inside -->
+      <div class="blk b-blue" style="left:30px; width:290px; top:36px; justify-content:flex-start; padding-left:8px">
+        (0,__vite_ssr_import_0__.fn)<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-left:5px;border:1.5px solid var(--blue);border-radius:4px;background:#fff;font-weight:700">(</span>
+      </div>
+      <div class="blk b-gray" style="left:352px; width:24px; top:36px">1</div>
+      <div class="blk b-gray" style="left:380px; width:24px; top:36px">)</div>
+      <div class="badge" style="left:236px; top:2px">V8 anchors here &rarr; but the <code>(</code> now maps to col&nbsp;0</div>
+
+      <div class="rowlab" style="left:0; top:190px">source</div>
+      <div class="cell hl-callee" style="left:320px; top:214px">f</div>
+      <div class="cell hl-callee" style="left:360px; top:214px">n</div>
+      <div class="cell" style="left:400px; top:214px">(</div>
+      <div class="cell" style="left:440px; top:214px">1</div>
+      <div class="cell" style="left:480px; top:214px">)</div>
+      <div class="collab" style="left:320px; top:248px">col 0</div>
+      <div class="collab" style="left:360px; top:248px">1</div>
+      <div class="collab" style="left:400px; top:248px">2</div>
+      <div class="collab" style="left:440px; top:248px">3</div>
+      <div class="collab" style="left:480px; top:248px">4</div>
+    </div>
+    <div class="result good">V8 frame &rarr; source <b>col&nbsp;0</b> &rarr; reports <b>2:1</b> &nbsp;&mdash;&nbsp; points at <code>fn</code>. <b>Matches Node.</b></div>
+  </div>
+
+  <!-- ============ V8 REFERENCE ============ -->
+  <div class="v8">
+    <h2 style="margin-top:0">Why V8 anchors here &mdash; the source of truth</h2>
+    <p style="margin-top:6px">
+      This isn&rsquo;t a quirk the patch stumbled on; it&rsquo;s an <b>explicit, commented decision</b> in V8&rsquo;s
+      parser. When building a call node, V8 picks the stack-trace position based on the token
+      <em>immediately before</em> the argument-list <code>(</code>:
+    </p>
+    <div class="codeblock"><span class="cmt">/* Call */</span>
+<span class="kw">case</span> Token::kLeftParen: {
+  <span class="kw">int</span> pos;
+  <span class="kw">if</span> (Token::<span class="fn">IsCallable</span>(scanner()->current_token())) {
+    <span class="cmt">// For call of an identifier we want to report position of</span>
+    <span class="cmt">// the identifier as position of the call in the stack trace.</span>
+    pos = <span class="hlblue">position()</span>;        <span class="cmt">// &larr; start of the callee</span>
+  } <span class="kw">else</span> {
+    <span class="cmt">// For other kinds of calls we record position of the parenthesis</span>
+    <span class="cmt">// as position of the call. ... for expressions of the form</span>
+    <span class="cmt">// function(){...}() ...</span>
+    pos = <span class="hlred">peek_position()</span>;   <span class="cmt">// &larr; the argument-list "("</span>
+  }</div>
+    <p class="srcref">V8 &middot; <a href="https://github.com/v8/v8/blob/0c7a9d0d8c05491e8053d7259a1a6b11e75c1907/src/parsing/parser-base.h#L4030-L4045"><code>src/parsing/parser-base.h:4030</code></a> &middot; <code>ParseLeftHandSideContinuation</code> &rarr; <code>case Token::kLeftParen</code> <span style="color:var(--muted)">(pinned to v8/v8 @ 0c7a9d0)</span></p>
+
+    <p style="margin-top:16px">
+      The discriminator <code>IsCallable(current_token())</code> is just a token-range check
+      (<a href="https://github.com/v8/v8/blob/0c7a9d0d8c05491e8053d7259a1a6b11e75c1907/src/parsing/token.h#L248"><code>src/parsing/token.h:248</code></a>): identifiers, property names, <code>this</code>, <code>super</code>,
+      reserved words. So the position depends purely on what character ends the callee:
+    </p>
+    <table class="disc">
+      <thead><tr><th>Call form</th><th>Token before <code>(</code></th><th><code>IsCallable</code>?</th><th>Recorded position</th></tr></thead>
+      <tbody>
+        <tr><td><code>fn(&hellip;)</code></td><td>identifier <code>fn</code></td><td class="yes">yes</td><td><code>position()</code> &rarr; <span class="callee">callee start</span></td></tr>
+        <tr><td><code>obj.fn(&hellip;)</code></td><td>property name <code>fn</code></td><td class="yes">yes</td><td><code>position()</code> &rarr; <span class="callee">property name</span></td></tr>
+        <tr><td><code>(0,&hellip;fn)(&hellip;)</code> <small>(the transform)</small></td><td><code>)</code></td><td class="no">no</td><td><code>peek_position()</code> &rarr; <span class="paren">the <code>(</code></span></td></tr>
+        <tr><td><code>fn?.()</code></td><td><code>?.</code></td><td class="no">no</td><td><code>peek_position()</code> &rarr; <span class="paren">the <code>(</code></span></td></tr>
+        <tr><td><code>obj[x]()</code></td><td><code>]</code></td><td class="no">no</td><td><code>peek_position()</code> &rarr; <span class="paren">the <code>(</code></span></td></tr>
+      </tbody>
+    </table>
+    <p style="margin-bottom:0">
+      Two takeaways: (1) the <code>(0,&hellip;)</code> wrap &mdash; added to unbind <code>this</code> &mdash; makes the callee
+      end in <code>)</code>, which flips <em>every</em> transformed call into the <code>peek_position()</code> branch, so V8
+      always reports the <code>(</code>. The sourcemap is then the only lever left, and the patch bends it so that
+      <code>(</code> resolves back to the callee. (2) The old mapping was <em>literally faithful</em> (generated <code>(</code>
+      &rarr; source <code>(</code>); the fix is a deliberate, <b>V8/Node-specific</b> counter-adjustment. Other engines
+      may anchor differently, but for SSR the runtime is Node.
+    </p>
+  </div>
+
+  <!-- ============ EXCEPTION ============ -->
+  <div class="exception">
+    <h2 style="margin-top:0">The one exception: optional calls <code>fn?.()</code></h2>
+    <p style="margin-bottom:6px">
+      This falls out of the <em>same</em> V8 rule: the token before <code>(</code> is <code>?.</code>, which isn&rsquo;t
+      <code>IsCallable</code>, so <b>even un-transformed Node</b> already reports the <code>(</code> column. Matching
+      Node therefore means <em>not</em> folding here &mdash; the fix excludes them with <code>!parent.optional</code>,
+      keeps the old wrap, and leaves the <code>(</code> mapped to its own column&nbsp;4.
+    </p>
+    <p class="mono" style="color:var(--muted); margin:6px 0 0">
+      f<span style="color:var(--muted)">&nbsp;</span>n<span style="color:var(--muted)">&nbsp;</span>?<span style="color:var(--muted)">&nbsp;</span>.<span style="color:var(--muted)">&nbsp;</span><span class="paren">(</span>&nbsp;)<br>
+      0&nbsp;&nbsp;1&nbsp;&nbsp;2&nbsp;&nbsp;3&nbsp;&nbsp;<span class="paren">4</span>&nbsp;&nbsp;5&nbsp;&nbsp;&larr; reports 2:5, matching Node
+    </p>
+  </div>
+
+  <!-- ============ OTHER ENGINES ============ -->
+  <div class="v8">
+    <h2 style="margin-top:0">Other engines: WebKit / JSC (Bun) &mdash; different heuristic, already fine</h2>
+    <p style="margin-top:6px">
+      The <code>(</code>-anchoring above is <b>V8-specific</b>. JavaScriptCore (what Bun runs on) uses a different
+      call-site heuristic: it anchors the frame to the <span class="callee">callee identifier / property name</span>
+      in every case &mdash; parentheses and optional chaining included. Measured on identical raw source
+      (thrown-stack caller frame, column 1-indexed):
+    </p>
+    <table class="disc">
+      <thead><tr><th>Call form</th><th>V8 / Node</th><th>JSC / Bun</th></tr></thead>
+      <tbody>
+        <tr><td><code>fn()</code></td><td><span class="callee">3:1</span> callee</td><td><span class="callee">3:1</span> callee</td></tr>
+        <tr><td><code>ns.fn()</code></td><td><span class="callee">3:4</span> property</td><td><span class="callee">3:4</span> property</td></tr>
+        <tr><td><code>(0, ns.fn)()</code> <small>(the transform)</small></td><td><span class="paren">3:13</span> the <code>(</code></td><td><span class="callee">3:8</span> property <code>fn</code></td></tr>
+        <tr><td><code>ns.fn?.()</code></td><td><span class="paren">3:10</span> the <code>(</code></td><td><span class="callee">3:4</span> property <code>fn</code></td></tr>
+      </tbody>
+    </table>
+    <p style="margin-bottom:0">
+      Because JSC reads the generated property token <code>.fn</code> (not the args <code>(</code>), and that token sits in
+      the <span class="callee">binding chunk that already maps to the callee start</span> under <em>both</em> the old and
+      new mapping, <b>Bun/JSC already reports the Node-aligned column before this patch and still does after</b>. In
+      other words the fix is a V8-only correction; WebKit&rsquo;s mapping heuristic differs but <b>works as-is</b>, and the
+      change is a harmless no-op for it (the args <code>(</code> now also maps to col&nbsp;0, but JSC never reads that
+      position). <span style="color:var(--muted)">Measured with Node v24.18.0 (V8) and Bun 1.3.14 (JSC).</span>
+    </p>
+  </div>
+
+  <div class="foot">
+    <p style="margin:0 0 4px">
+      <b>Why it's low-risk:</b> in the new branch the emitted string is <em>identical</em> to before
+      &mdash; <code>code.slice(id.end, argsStart)</code> re-emits the exact original whitespace/comments/<code>(</code>
+      (or the whole <code>()</code> for empty arg lists via <code>parent.end</code>). Only the chunk boundary,
+      and thus the sourcemap, changes.
+    </p>
+    <p style="margin:4px 0 0">
+      Anchor: <a href="https://github.com/vitejs/vite/blob/e65ff84fae1f8f0adcce5bbcbe85f9f156f20830/packages/vite/src/node/ssr/ssrTransform.ts#L371"><code>packages/vite/src/node/ssr/ssrTransform.ts:371</code></a> &middot; <code>onIdentifier</code> &rarr;
+      <code>parent.type === 'CallExpression'</code> branch (guard <code>id === parent.callee &amp;&amp; !parent.optional</code>).
+    </p>
+  </div>
+</div>
+</body>
+</html>
