@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vitest PR 10708: Warm-Module Snapshot Call Chain</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d8dee9;
+      --paper: #f7f8fb;
+      --card: #ffffff;
+      --worker: #2563eb;
+      --worker-bg: #eff6ff;
+      --rpc: #b45309;
+      --rpc-bg: #fff7ed;
+      --server: #047857;
+      --server-bg: #ecfdf5;
+      --disk: #7c3aed;
+      --disk-bg: #f5f3ff;
+      --fallback: #64748b;
+      --fallback-bg: #f1f5f9;
+      --danger: #b42318;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: #175cd3; text-underline-offset: 3px; }
+    code {
+      padding: 0.12rem 0.32rem;
+      border: 1px solid #e4e7ec;
+      border-radius: 5px;
+      background: #f9fafb;
+      font: 0.88em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 56px 0 34px; border-bottom: 1px solid var(--line); background: var(--card); }
+    .eyebrow { margin: 0 0 8px; color: var(--worker); font-size: 12px; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; }
+    h1 { max-width: 850px; margin: 0; font-size: clamp(32px, 5vw, 54px); line-height: 1.04; letter-spacing: -0.035em; }
+    .lede { max-width: 790px; margin: 18px 0 0; color: #475467; font-size: 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 24px; color: var(--muted); font-size: 13px; }
+    .page { display: grid; grid-template-columns: 178px minmax(0, 1fr); gap: 38px; align-items: start; }
+    nav { position: sticky; top: 22px; margin-top: 38px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,0.94); backdrop-filter: blur(10px); }
+    .nav-title { margin: 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    .nav-inner { display: flex; flex-direction: column; gap: 3px; }
+    nav a { padding: 7px 9px; border-radius: 7px; color: #344054; font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: #f2f4f7; color: var(--worker); }
+    main { min-width: 0; padding: 38px 0 72px; }
+    section { margin-bottom: 48px; scroll-margin-top: 60px; }
+    h2 { margin: 0 0 8px; font-size: 27px; letter-spacing: -0.02em; }
+    h3 { margin: 0; font-size: 17px; }
+    .section-intro { max-width: 790px; margin: 0 0 22px; color: var(--muted); }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 12px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; }
+    .dot.worker { background: var(--worker); }
+    .dot.rpc { background: var(--rpc); }
+    .dot.server { background: var(--server); }
+    .dot.disk { background: var(--disk); }
+    .dot.fallback { background: var(--fallback); }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .panel { border: 1px solid var(--line); border-radius: 14px; background: var(--card); overflow: hidden; }
+    .panel-head { padding: 17px 19px; border-bottom: 1px solid var(--line); }
+    .panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .sequence { display: grid; gap: 9px; padding: 18px; }
+    .seq-row { display: grid; grid-template-columns: 104px 28px 1fr; align-items: center; min-height: 42px; }
+    .seq-label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .arrow { color: #98a2b3; text-align: center; font-size: 18px; }
+    .pill { padding: 9px 11px; border: 1px solid; border-radius: 8px; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .pill.rpc { border-color: #fed7aa; background: var(--rpc-bg); color: var(--rpc); }
+    .pill.worker { border-color: #bfdbfe; background: var(--worker-bg); color: var(--worker); }
+    .pill.disk { border-color: #ddd6fe; background: var(--disk-bg); color: var(--disk); }
+    .count { display: inline-block; margin-top: 12px; padding: 5px 9px; border-radius: 6px; background: #f2f4f7; color: #475467; font-size: 12px; font-weight: 700; }
+
+    .example-grid { display: grid; grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr); gap: 18px; }
+    .module-graph, .story { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .module-graph h3, .story h3 { margin-bottom: 16px; }
+    .modules { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr); gap: 10px 4px; align-items: center; }
+    .entry-stack, .shared-chain { display: grid; gap: 10px; }
+    .shared-chain { justify-items: stretch; }
+    .module { padding: 11px; border: 1px solid; border-radius: 9px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .module.entry { border-color: #bfdbfe; background: var(--worker-bg); color: var(--worker); }
+    .module.shared { border-color: #ddd6fe; background: var(--disk-bg); color: var(--disk); }
+    .module small { display: block; margin-top: 4px; opacity: 0.72; font: 11px/1.35 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .graph-arrow { color: #98a2b3; text-align: center; font-size: 18px; }
+    .graph-down { color: #98a2b3; font-size: 18px; line-height: 1; text-align: center; }
+    .graph-join { grid-column: 1 / -1; color: var(--muted); font-size: 12px; text-align: center; }
+    .chain-list { display: grid; gap: 12px; overflow-x: auto; }
+    .chain-row { display: grid; grid-template-columns: minmax(112px, 1fr) 24px minmax(112px, 1fr) 24px minmax(112px, 1fr); align-items: center; min-width: 490px; }
+    .chain-row .module { min-width: 0; }
+    .same-node { margin-top: 12px; color: var(--muted); font-size: 11px; text-align: right; }
+    .direct-graphs { display: grid; gap: 12px; }
+    .direct-row { display: grid; grid-template-columns: minmax(112px, 0.8fr) 28px minmax(180px, 1.2fr); align-items: center; }
+    .dep-stack { display: flex; flex-wrap: wrap; gap: 7px; }
+    .dep-stack .module { flex: 1 1 92px; }
+    .graph-phase { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+    .graph-divider { position: relative; height: 20px; border-top: 1px solid var(--line); }
+    .graph-divider span { position: absolute; top: -9px; left: 50%; padding: 0 8px; background: var(--card); color: var(--muted); font-size: 10px; font-weight: 750; transform: translateX(-50%); white-space: nowrap; }
+    .case-label { display: inline-block; margin-bottom: 12px; padding: 3px 7px; border-radius: 5px; background: var(--server-bg); color: var(--server); font-size: 10px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+    .case-label.miss { background: var(--rpc-bg); color: var(--rpc); }
+    .miss-case { margin-top: 18px; padding: 20px; border: 1px solid #fed7aa; border-radius: 14px; background: #fffcf7; }
+    .miss-case h3 { margin-bottom: 7px; }
+    .miss-case > p { margin: 0 0 15px; color: var(--muted); font-size: 13px; }
+    .story-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: story; }
+    .story-list li { position: relative; padding: 11px 12px 11px 47px; border: 1px solid var(--line); border-radius: 9px; color: #475467; font-size: 13px; counter-increment: story; }
+    .story-list li::before { content: counter(story); position: absolute; left: 12px; top: 11px; display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; background: #eef2ff; color: #3538cd; font-size: 12px; font-weight: 800; }
+    .story-list strong { color: var(--ink); }
+
+    .data-flow { display: grid; grid-template-columns: minmax(0, 0.8fr) 52px minmax(0, 1.2fr); gap: 14px; align-items: stretch; }
+    .packet { border: 1px solid var(--line); border-radius: 14px; background: var(--card); overflow: hidden; }
+    .packet-head { padding: 13px 16px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+    .packet.request .packet-head { background: var(--rpc-bg); color: var(--rpc); }
+    .packet.response .packet-head { background: var(--server-bg); color: var(--server); }
+    .packet-body { padding: 16px; }
+    .field { margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+    .field-name { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; }
+    .value-list { display: grid; gap: 5px; }
+    .value-list code { display: block; overflow-wrap: anywhere; }
+    .data-code { margin: 0; padding: 13px; overflow-x: auto; border: 1px solid #e4e7ec; border-radius: 9px; background: #101828; color: #e4e7ec; font: 11.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; }
+    .data-note { margin: 11px 0 0; color: var(--muted); font-size: 12px; }
+    .flow-arrow { display: grid; place-items: center; color: var(--rpc); font-size: 28px; }
+    .map-list { display: grid; gap: 8px; }
+    .map-row { display: grid; grid-template-columns: minmax(0, 0.8fr) 22px minmax(0, 1.2fr); align-items: center; padding: 9px; border: 1px solid #e4e7ec; border-radius: 8px; background: #fcfcfd; font-size: 12px; }
+    .map-row .key { color: var(--worker); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+    .map-row .maps-to { color: #98a2b3; text-align: center; }
+    .map-row .descriptor { color: var(--disk); }
+    .map-row.external .descriptor { color: var(--server); }
+    .omissions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+    .omissions span { padding: 5px 8px; border: 1px dashed #fda29b; border-radius: 6px; background: #fffbfa; color: var(--danger); font-size: 11px; }
+
+    .isolation-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .isolation-card { position: relative; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .isolation-card.best { border: 2px solid var(--server); background: var(--server-bg); }
+    .rank { display: inline-block; margin-bottom: 12px; padding: 4px 8px; border-radius: 999px; background: #101828; color: white; font-size: 10px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+    .isolation-card.best .rank { background: var(--server); }
+    .isolation-card h3 { margin-bottom: 5px; }
+    .isolation-card > p { margin: 0 0 15px; color: var(--muted); font-size: 13px; }
+    .work-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+    .work-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 7px; background: rgba(255,255,255,0.72); font-size: 12px; }
+    .work-list strong { font-weight: 750; }
+    .saved { color: var(--server); }
+    .paid { color: var(--rpc); }
+    .scope-note { margin-top: 13px; padding: 10px 11px; border: 1px dashed #6ce9a6; border-radius: 8px; background: rgba(255,255,255,0.78); color: #475467; font-size: 12px; }
+    .scope-note strong { color: var(--server); }
+
+    .lanes { border: 1px solid var(--line); border-radius: 15px; background: var(--card); overflow: hidden; }
+    .lane-head, .flow-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .lane-head > div { padding: 11px 14px; border-right: 1px solid var(--line); font-size: 12px; font-weight: 750; text-align: center; text-transform: uppercase; }
+    .lane-head > div:last-child { border-right: 0; }
+    .lane-head .worker { background: var(--worker-bg); color: var(--worker); }
+    .lane-head .rpc { background: var(--rpc-bg); color: var(--rpc); }
+    .lane-head .server { background: var(--server-bg); color: var(--server); }
+    .lane-head .disk { background: var(--disk-bg); color: var(--disk); }
+    .flow-row { position: relative; min-height: 104px; border-top: 1px solid var(--line); }
+    .flow-row > div { display: flex; align-items: center; justify-content: center; padding: 14px; border-right: 1px dashed #e4e7ec; }
+    .flow-row > div:last-child { border-right: 0; }
+    .step { width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--card); box-shadow: 0 1px 2px rgba(16,24,40,0.04); font-size: 12px; }
+    .step strong { display: block; margin-bottom: 3px; }
+    .step.worker { border-left: 4px solid var(--worker); }
+    .step.rpc { border-left: 4px solid var(--rpc); }
+    .step.server { border-left: 4px solid var(--server); }
+    .step.disk { border-left: 4px solid var(--disk); }
+    .step.fallback { border-left: 4px solid var(--fallback); background: var(--fallback-bg); }
+    .step.new { position: relative; outline: 2px solid #101828; outline-offset: 2px; }
+    .new-badge { display: inline-block; margin-bottom: 7px; padding: 2px 6px; border-radius: 4px; background: #101828; color: white; font-size: 9px; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; }
+    .blank { color: #c2c8d0; font-size: 20px; }
+    .row-note { grid-column: 1 / -1; display: block !important; min-height: 0; padding: 8px 14px !important; border-top: 1px dotted var(--line); border-right: 0 !important; background: #fcfcfd; color: var(--muted); font-size: 12px; text-align: center; }
+
+    .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .rule { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+    .rule .num { display: inline-grid; width: 28px; height: 28px; place-items: center; margin-bottom: 12px; border-radius: 8px; background: #eef2ff; color: #3538cd; font-weight: 800; }
+    .rule p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+
+    .callout { padding: 18px 20px; border: 1px solid #fecdca; border-left: 5px solid var(--danger); border-radius: 10px; background: #fffbfa; }
+    .callout strong { display: block; margin-bottom: 5px; color: var(--danger); }
+    .patch-list { display: grid; gap: 11px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+    .patch-row { display: grid; grid-template-columns: minmax(220px, 1.35fr) minmax(180px, 1fr) 72px; gap: 14px; align-items: center; }
+    .patch-file { min-width: 0; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .patch-file a { color: inherit; font-weight: 700; }
+    .patch-file small { display: block; margin-top: 3px; color: var(--muted); font: 11px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .bar-track { height: 12px; border-radius: 999px; background: #f2f4f7; overflow: hidden; }
+    .bar { height: 100%; min-width: 5px; border-radius: inherit; }
+    .bar.worker { background: var(--worker); }
+    .bar.rpc { background: var(--rpc); }
+    .bar.server { background: var(--server); }
+    .bar.fallback { background: var(--fallback); }
+    .delta { color: #475467; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-align: right; }
+    .patch-key { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+    .patch-key span { display: inline-flex; align-items: center; gap: 6px; }
+    footer { padding: 24px 0 42px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 900px) {
+      .page { display: block; width: 100%; }
+      nav { position: sticky; top: 0; z-index: 2; margin: 0; padding: 0; border-width: 0 0 1px; border-radius: 0; }
+      .nav-title { display: none; }
+      .nav-inner { width: min(1180px, calc(100% - 32px)); margin: 0 auto; flex-direction: row; gap: 10px; overflow-x: auto; padding-block: 8px; }
+      nav a { padding: 5px 7px; }
+      main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    }
+
+    @media (max-width: 800px) {
+      .compare, .rules { grid-template-columns: 1fr; }
+      .example-grid { grid-template-columns: 1fr; }
+      .data-flow { grid-template-columns: 1fr; }
+      .isolation-compare { grid-template-columns: 1fr; }
+      .flow-arrow { min-height: 30px; transform: rotate(90deg); }
+      .lane-head { display: none; }
+      .flow-row { grid-template-columns: 1fr; gap: 8px; padding: 12px; }
+      .flow-row > div { justify-content: stretch; padding: 0; border: 0; }
+      .flow-row > div:empty { display: none; }
+      .row-note { margin: 0 -12px -12px; padding: 8px 12px !important; }
+      .patch-row { grid-template-columns: 1fr 58px; gap: 6px 10px; }
+      .patch-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="shell">
+      <p class="eyebrow">Vitest architecture note</p>
+      <h1>One module graph snapshot instead of one RPC per dependency</h1>
+      <p class="lede">PR 10708 lets a worker ask the main process once for already-transformed modules, then read their cached code directly from disk. The normal fetch pipeline remains the fallback.</p>
+      <div class="meta">
+        <span>Commit <code>98bc513e7</code></span>
+        <span>Branch <code>perf/warm-modules</code></span>
+        <a href="https://github.com/vitest-dev/vitest/pull/10708">PR 10708</a>
+        <a href="https://github.com/vitest-dev/vitest/commit/98bc513e7a4b41d193324904c5ba701a2536df8a">Pinned commit</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="page shell">
+    <nav aria-label="Page sections">
+      <p class="nav-title">On this page</p>
+      <div class="nav-inner">
+        <a href="#idea">Idea</a>
+        <a href="#example">Concrete examples</a>
+        <a href="#data">Data shape</a>
+        <a href="#isolation">Isolation contrast</a>
+        <a href="#chain">Call chain</a>
+        <a href="#rules">Lifecycle rules</a>
+        <a href="#patch">Patch anatomy</a>
+      </div>
+    </nav>
+
+    <main>
+    <section id="idea">
+      <h2>The cost being removed</h2>
+      <p class="section-intro">Vite's evaluator discovers dependencies sequentially. Previously, even an already-transformed module required a main-process fetch RPC. The snapshot moves only the lookup and file transfer off that repeated path.</p>
+      <div class="legend" aria-label="Visual legend">
+        <span><i class="dot worker"></i>Worker runtime</span>
+        <span><i class="dot rpc"></i>Process RPC</span>
+        <span><i class="dot server"></i>Main/Vite server</span>
+        <span><i class="dot disk"></i>Disk cache</span>
+        <span><i class="dot fallback"></i>Fallback path</span>
+      </div>
+      <div class="compare">
+        <article class="panel">
+          <div class="panel-head">
+            <h3>Before: serialized round trips</h3>
+            <p>Every dependency asks the main process independently.</p>
+            <span class="count">N modules = up to N fetch RPCs</span>
+          </div>
+          <div class="sequence">
+            <div class="seq-row"><span class="seq-label">Cold dep</span><span class="arrow">→</span><span class="pill rpc">rpc.fetch(dep1.ts)</span></div>
+            <div class="seq-row"><span class="seq-label">Warm dep</span><span class="arrow">→</span><span class="pill rpc">rpc.fetch(dep2.ts)</span></div>
+            <div class="seq-row"><span class="seq-label">Warm dep</span><span class="arrow">→</span><span class="pill rpc">rpc.fetch(dep3.ts)</span></div>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
+            <h3>After: snapshot, then local reads</h3>
+            <p>One map returns cache paths for the known graph.</p>
+            <span class="count">N warm modules = 1 snapshot RPC</span>
+          </div>
+          <div class="sequence">
+            <div class="seq-row"><span class="seq-label">Snapshot</span><span class="arrow">→</span><span class="pill rpc">rpc.fetchWarmModules(files)</span></div>
+            <div class="seq-row"><span class="seq-label">Cold dep1</span><span class="arrow">→</span><span class="pill worker">fall through to rpc.fetch</span></div>
+            <div class="seq-row"><span class="seq-label">Warm dep2</span><span class="arrow">→</span><span class="pill disk">readFileSync(dep2 path)</span></div>
+            <div class="seq-row"><span class="seq-label">Warm dep3</span><span class="arrow">→</span><span class="pill disk">readFileSync(dep3 path)</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="example">
+      <h2>Happy path and graph-boundary miss</h2>
+      <p class="section-intro">Direct imports are already present in <code>second.test.ts.importedModules</code> after entry transform. That lets a snapshot triggered by one cold dependency collect its warm siblings. The miss case appears when a warm module sits behind a cold, untransformed intermediary.</p>
+      <div class="example-grid">
+        <article class="module-graph">
+          <span class="case-label">Happy: warm direct siblings</span>
+          <h3>Direct-import graph</h3>
+          <div class="direct-graphs">
+            <div class="graph-phase">1. Existing server state</div>
+            <div class="direct-row">
+              <div class="module entry">first.test.ts<small>already ran</small></div><div class="graph-arrow">&rarr;</div>
+              <div class="dep-stack">
+                <div class="module shared">dep2.ts<small>warm</small></div>
+                <div class="module shared">dep3.ts<small>warm</small></div>
+              </div>
+            </div>
+            <div class="graph-divider"><span>then a fresh entry starts</span></div>
+            <div class="graph-phase">2. Current entry after import analysis</div>
+            <div class="direct-row">
+              <div class="module entry">second.test.ts<small>entry fetched now</small></div><div class="graph-arrow">&rarr;</div>
+              <div class="dep-stack">
+                <div class="module entry">dep1.ts<small>cold trigger</small></div>
+                <div class="module shared">dep2.ts<small>warm sibling</small></div>
+                <div class="module shared">dep3.ts<small>warm sibling</small></div>
+              </div>
+            </div>
+          </div>
+        </article>
+        <article class="story">
+          <span class="case-label">Snapshot result</span>
+          <h3>What happens on <code>dep1.ts</code></h3>
+          <ol class="story-list">
+            <li><strong>Fetch <code>second.test.ts</code> normally.</strong> Vite import analysis creates direct graph edges to <code>dep1.ts</code>, <code>dep2.ts</code>, and <code>dep3.ts</code>.</li>
+            <li><strong>Start fetching cold <code>dep1.ts</code>.</strong> This first dependency call triggers <code>fetchWarmModules</code>.</li>
+            <li><strong>Walk every direct edge.</strong> The graph walker sees all three dependency nodes even though <code>dep1.ts</code> happened to trigger the call.</li>
+            <li><strong>Return the warm subset.</strong> The snapshot includes <code>second.test.ts</code>, <code>dep2.ts</code>, and <code>dep3.ts</code>; cold <code>dep1.ts</code> is omitted.</li>
+            <li><strong>Mix fallback and local reads.</strong> <code>dep1.ts</code> uses normal RPC, while later requests for <code>dep2.ts</code> and <code>dep3.ts</code> read their snapshot paths locally.</li>
+          </ol>
+        </article>
+      </div>
+      <div class="miss-case">
+        <span class="case-label miss">Miss: warm module behind cold intermediary</span>
+        <h3>The transitive edge is not known yet</h3>
+        <p>Contrast the direct-import case with two chains whose unique intermediary differs:</p>
+        <div class="chain-list">
+          <div class="chain-row"><div class="module entry">first.test.ts</div><div class="graph-arrow">&rarr;</div><div class="module shared">first-dep.ts<small>warm</small></div><div class="graph-arrow">&rarr;</div><div class="module shared">shared-dep.ts<small>warm</small></div></div>
+          <div class="chain-row"><div class="module entry">second.test.ts</div><div class="graph-arrow">&rarr;</div><div class="module entry">second-dep.ts<small>cold</small></div><div class="graph-arrow">&rarr;</div><div class="module shared">shared-dep.ts<small>warm but hidden</small></div></div>
+        </div>
+        <p style="margin-top: 15px"><code>second.test.ts</code> import analysis can expose only its direct <code>second-dep.ts</code> edge. Because that node has never been transformed, its <code>importedModules</code> does not yet reveal <code>shared-dep.ts</code>. The first snapshot therefore contains the entry only; both dependencies fall back in this context.</p>
+      </div>
+    </section>
+
+    <section id="data">
+      <h2>What crosses the RPC boundary</h2>
+      <p class="section-intro">Conceptually, the worker sends the scope of the current run. The server returns a lookup table for only the already-warm parts of that scope. This is the relevant new information, not the exact serialized TypeScript shape.</p>
+      <div class="data-flow">
+        <article class="packet request">
+          <div class="packet-head">Worker &rarr; main: snapshot request</div>
+          <div class="packet-body">
+<pre class="data-code">fetchWarmModules(
+  "node",
+  [
+    "/project/test/second.test.ts"
+  ]
+)</pre>
+            <p class="data-note">These are the RPC's two positional arguments: environment name and current run entry paths. The server appends configured setup-file paths before walking the graph.</p>
+          </div>
+        </article>
+
+        <div class="flow-arrow" aria-hidden="true">&rarr;</div>
+
+        <article class="packet response">
+          <div class="packet-head">Main &rarr; worker: warm lookup table</div>
+          <div class="packet-body">
+<pre class="data-code">{
+  // The just-fetched entry is part of the walk.
+  "/test/second.test.ts": {
+    cached: true,
+    tmp: "/tmp/vitest/.../a1b2",
+    file: "/project/test/second.test.ts",
+    id: "/project/test/second.test.ts",
+    url: "/test/second.test.ts",
+    invalidate: false
+  },
+
+  // Alias with the same descriptor values
+  "/project/test/second.test.ts": { ... },
+
+  "/src/dep2.ts": {
+    cached: true,
+    tmp: "/tmp/vitest/.../d2",
+    id: "/project/src/dep2.ts",
+    url: "/src/dep2.ts",
+    ...
+  },
+
+  "/src/dep3.ts": {
+    cached: true,
+    tmp: "/tmp/vitest/.../d3",
+    id: "/project/src/dep3.ts",
+    url: "/src/dep3.ts",
+    ...
+  },
+
+  // dep1.ts is absent: its node is cold.
+
+  "/node_modules/pkg/index.js": {
+    externalize: "file:///.../pkg/index.js",
+    type: "module"
+  }
+}</pre>
+            <p class="data-note">This is the happy direct-import snapshot. The triggering <code>dep1.ts</code> is absent, but its warm sibling nodes are already visible through <code>second.test.ts.importedModules</code>.</p>
+            <div class="omissions" aria-label="Entries omitted from the snapshot">
+              <span>not transformed</span>
+              <span>invalidated</span>
+              <span>no disk path</span>
+            </div>
+          </div>
+        </article>
+      </div>
+      <div class="callout" style="margin-top: 16px">
+        <strong>The worker stores this as a run-scoped promise</strong>
+        Dependency fetches look up both the requested module ID and its normalized raw ID. A disk descriptor produces a local file read; an external descriptor is returned directly; no entry means fall back to the original per-module RPC.
+      </div>
+      <div class="callout" style="margin-top: 12px">
+        <strong>Review concern: external results need environment scope</strong>
+        The PR stores externalization results by Vite server and requested URL, then shares them with every environment. Vite resolves even leading-slash URLs through each environment's plugin container, so the same URL can map to different resolved IDs. The external cache should also be keyed by environment.
+      </div>
+    </section>
+
+    <section id="isolation">
+      <h2>The important contrast: reuse is worker-local</h2>
+      <p class="section-intro">Keeping an already-evaluated module is still the cheapest path, but that reuse belongs to one worker runtime. With multiple non-isolated workers, each runtime has its own evaluated-module cache and must perform an initial fetch; snapshots can help one worker reuse server work performed by another.</p>
+      <div class="isolation-compare">
+        <article class="isolation-card best">
+          <span class="rank">Best reuse path</span>
+          <h3><code>isolate: false</code></h3>
+          <p>The same worker keeps its evaluated module cache across test files. A shared dependency such as <code>shared-dep.ts</code> is reused as a live module.</p>
+          <ul class="work-list">
+            <li><span>Per-module RPC</span><strong class="saved">skipped</strong></li>
+            <li><span>Disk read</span><strong class="saved">skipped</strong></li>
+            <li><span>Parse / compile</span><strong class="saved">skipped</strong></li>
+            <li><span>Module evaluation</span><strong class="saved">skipped</strong></li>
+          </ul>
+          <div class="scope-note"><strong>Scope: one runtime.</strong> A second non-isolated worker does not inherit this live module instance. Its first request can still use a warm snapshot produced from the shared server graph.</div>
+        </article>
+        <article class="isolation-card">
+          <span class="rank">Improved isolated path</span>
+          <h3><code>isolate: true</code> + warm snapshot</h3>
+          <p>The fresh worker-side module cache must instantiate <code>shared-dep.ts</code> again. The PR makes obtaining its transformed source cheaper.</p>
+          <ul class="work-list">
+            <li><span>Per-module RPC</span><strong class="saved">batched away</strong></li>
+            <li><span>Disk read</span><strong class="paid">still paid</strong></li>
+            <li><span>Parse / compile</span><strong class="paid">still paid</strong></li>
+            <li><span>Module evaluation</span><strong class="paid">still paid</strong></li>
+          </ul>
+        </article>
+      </div>
+      <div class="callout" style="margin-top: 16px">
+        <strong>Bottom line</strong>
+        <code>isolate: false</code> remains the larger optimization for repeated imports inside the same runtime. It is not snapshot-free: with multiple workers, every runtime has a first-load boundary, so one worker can use the same server-warm snapshot path after another worker has populated the graph. <code>isolate: true</code> creates that boundary much more often.
+      </div>
+    </section>
+
+    <section id="chain">
+      <h2>Run-to-module call chain</h2>
+      <p class="section-intro">The key timing decision is step 3: the entry uses the old path first. Only the first dependency requests the snapshot, after entry transform and import analysis have connected the graph.</p>
+      <div class="lanes">
+        <div class="lane-head">
+          <div class="worker">Worker</div>
+          <div class="rpc">RPC boundary</div>
+          <div class="server">Main / Vite</div>
+          <div class="disk">Disk</div>
+        </div>
+        <div class="flow-row">
+          <div><div class="step worker"><strong>1. Run context arrives</strong><code>init → execute → runTests</code><br>Contains files, environment, and RPC client.</div></div>
+          <div><span class="blank">·</span></div><div><span class="blank">·</span></div><div><span class="blank">·</span></div>
+        </div>
+        <div class="flow-row">
+          <div><div class="step worker"><strong>2. Module transport starts</strong><code>startVitestModuleRunner</code><br>Installs <code>transport.fetchModule</code>.</div></div>
+          <div><span class="blank">·</span></div><div><span class="blank">·</span></div><div><span class="blank">·</span></div>
+        </div>
+        <div class="flow-row">
+          <div><div class="step worker"><strong>3. Entry fetch</strong><code>importer == null</code><br>Warm lookup is intentionally skipped.</div></div>
+          <div><div class="step rpc"><strong>Existing request</strong><code>rpc.fetch(entry)</code></div></div>
+          <div><div class="step server"><strong>Transform + import analysis</strong>Vite populates or reconnects the entry's module graph.</div></div>
+          <div><div class="step disk"><strong>Optional cache write</strong>Fork temp copy or filesystem module cache.</div></div>
+          <div class="row-note">The graph must exist before it can be snapshotted.</div>
+        </div>
+        <div class="flow-row">
+          <div><div class="step worker new"><span class="new-badge">New in PR</span><strong>4. First dependency</strong><code>importer != null</code><br>Calls the memoized helper.</div></div>
+          <div><div class="step rpc new"><span class="new-badge">New in PR</span><strong>One request per ctx</strong><code>fetchWarmModules(environment, files)</code></div></div>
+          <div><div class="step server new"><span class="new-badge">New in PR</span><strong>Walk live graph</strong>Seed from test + setup files; follow <code>importedModules</code>.</div></div>
+          <div><div class="step disk new"><span class="new-badge">New in PR</span><strong>Return locations</strong>Only nodes with a current transform and disk path qualify.</div></div>
+        </div>
+        <div class="flow-row">
+          <div><div class="step worker new"><span class="new-badge">New in PR</span><strong>5. Warm hit</strong>Match requested <code>id</code> or unwrapped <code>rawId</code>.</div></div>
+          <div><span class="blank">·</span></div><div><span class="blank">·</span></div>
+          <div><div class="step disk new"><span class="new-badge">New in PR</span><strong>Local source read</strong><code>readFileSync(warmResult.tmp)</code><br>No per-module RPC.</div></div>
+        </div>
+        <div class="flow-row">
+          <div><div class="step fallback"><strong>6. Miss or vanished file</strong>Absent snapshot entry or failed disk read.</div></div>
+          <div><div class="step fallback"><strong>Fallback RPC</strong><code>rpc.fetch(id, importer, ...)</code></div></div>
+          <div><div class="step fallback"><strong>Normal fetch pipeline</strong>Resolve, externalize, transform, or return cache result.</div></div>
+          <div><div class="step fallback"><strong>Cache may be created</strong>A later run can include it in a fresh snapshot.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="rules">
+      <h2>Three lifecycle rules</h2>
+      <p class="section-intro">These rules make the optimization incremental and preserve the existing module-loader behavior.</p>
+      <div class="rules">
+        <article class="rule"><span class="num">1</span><h3>Delay until a dependency</h3><p>The entry has no importer and follows the normal fetch path. Its transform connects the graph before the snapshot is requested.</p></article>
+        <article class="rule"><span class="num">2</span><h3>Memoize per run context</h3><p>The worker shares one snapshot promise while <code>workerState.ctx</code> is unchanged. If that runtime receives another run request, its new context requests another snapshot.</p></article>
+        <article class="rule"><span class="num">3</span><h3>Fallback on every miss</h3><p>A missing graph node, missing disk path, or deleted temporary file uses the original <code>rpc.fetch</code> path.</p></article>
+      </div>
+      <div class="callout" style="margin-top: 16px">
+        <strong>Invalidation boundary</strong>
+        Invalidated server nodes lose their current <code>transformResult</code>, so the next graph walk omits them. The worker then fetches those modules live instead of trusting an old disk path.
+      </div>
+    </section>
+
+    <section id="patch">
+      <h2>Patch anatomy</h2>
+      <p class="section-intro">This is the single implementation reference. File names link to the reviewed commit, while bar lengths encode additions. The warm-module mechanism is concentrated in the first two rows; gray rows belong to the separate Node compile-cache optimization.</p>
+      <div class="patch-list" aria-label="Changed files sized by additions">
+        <div class="patch-row"><div class="patch-file"><a href="https://github.com/vitest-dev/vitest/blob/98bc513e7a4b41d193324904c5ba701a2536df8a/packages/vitest/src/node/pools/rpc.ts#L19">node/pools/rpc.ts</a><small>Main-side graph walk and external snapshots</small></div><div class="bar-track"><div class="bar server" style="width: 100%"></div></div><div class="delta">+86</div></div>
+        <div class="patch-row"><div class="patch-file"><a href="https://github.com/vitest-dev/vitest/blob/98bc513e7a4b41d193324904c5ba701a2536df8a/packages/vitest/src/runtime/moduleRunner/startVitestModuleRunner.ts#L55">runtime/moduleRunner/startVitestModuleRunner.ts</a><small>Worker memoization, lookup, disk read, fallback</small></div><div class="bar-track"><div class="bar worker" style="width: 65%"></div></div><div class="delta">+56 / -1</div></div>
+        <div class="patch-row"><div class="patch-file"><a href="https://github.com/vitest-dev/vitest/blob/98bc513e7a4b41d193324904c5ba701a2536df8a/packages/vitest/vitest.mjs#L1">vitest.mjs</a><small>Separate Node compile-cache optimization</small></div><div class="bar-track"><div class="bar fallback" style="width: 21%"></div></div><div class="delta">+18 / -1</div></div>
+        <div class="patch-row"><div class="patch-file"><a href="https://github.com/vitest-dev/vitest/blob/98bc513e7a4b41d193324904c5ba701a2536df8a/packages/vitest/src/node/environments/fetchModule.ts#L134">node/environments/fetchModule.ts</a><small>Remember fresh filesystem-cache path</small></div><div class="bar-track"><div class="bar server" style="width: 9%"></div></div><div class="delta">+8 / -1</div></div>
+        <div class="patch-row"><div class="patch-file"><a href="https://github.com/vitest-dev/vitest/blob/98bc513e7a4b41d193324904c5ba701a2536df8a/packages/vitest/src/node/pool.ts#L127">node/pool.ts</a><small>Disable compile cache for coverage workers</small></div><div class="bar-track"><div class="bar fallback" style="width: 9%"></div></div><div class="delta">+8</div></div>
+        <div class="patch-row"><div class="patch-file"><a href="https://github.com/vitest-dev/vitest/blob/98bc513e7a4b41d193324904c5ba701a2536df8a/packages/vitest/src/types/rpc.ts#L16">types/rpc.ts</a><small>Declare the new RPC contract</small></div><div class="bar-track"><div class="bar rpc" style="width: 7%"></div></div><div class="delta">+6</div></div>
+      </div>
+      <div class="patch-key">
+        <span><i class="dot server"></i>Main/server implementation</span>
+        <span><i class="dot worker"></i>Worker implementation</span>
+        <span><i class="dot rpc"></i>RPC contract</span>
+        <span><i class="dot fallback"></i>Compile-cache change</span>
+      </div>
+    </section>
+    </main>
+  </div>
+
+  <footer>
+    <div class="shell">Local investigation artifact for Vitest PR 10708. Generated from commit <code>98bc513e7a4b41d193324904c5ba701a2536df8a</code>.</div>
+  </footer>
+</body>
+</html>
