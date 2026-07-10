@@ -41,10 +41,12 @@
   .legend { display: flex; flex-wrap: wrap; gap: 18px; margin: 24px 0 0; color: var(--muted); font-size: 12px; }
   .legend span { display: inline-flex; gap: 7px; align-items: center; }
   .swatch { width: 11px; height: 11px; border-radius: 3px; border: 1px solid; }
+  header[id], section[id] { scroll-margin-top: 24px; }
   section { margin-top: 38px; }
   h2 { margin: 0 0 14px; font-size: 20px; color: var(--ink); }
   h2 a { color: inherit; text-decoration: none; }
   h2 a:hover::after, h2 a:focus-visible::after { content: " #"; color: var(--muted); }
+  section:target h2 a, header:target h1 { color: var(--run); }
   section > h3 { margin: 24px 0 12px; font-size: 17px; }
   .before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .card { border: 1px solid var(--line); border-radius: 14px; background: white; padding: 20px; }
@@ -130,10 +132,16 @@
   .failure-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
   .failure-explanation { padding: 16px; border-top: 1px solid var(--line); color: #46514c; font-size: 13px; line-height: 1.55; }
   .rule { border: 1px solid var(--line); border-radius: 14px; background: white; overflow: hidden; }
-  .formula { padding: 25px 18px; text-align: center; font-family: ui-monospace, monospace; font-size: clamp(15px, 2.5vw, 22px); }
+  .formula { padding: 25px 18px; overflow-x: auto; text-align: center; font-family: ui-monospace, monospace; font-size: clamp(15px, 2.5vw, 22px); }
   .formula small { color: var(--muted); font-size: 11px; }
   .formula .left { color: var(--run); }
   .formula .right { color: var(--open); }
+  .formula-principle { display: flex; justify-content: center; align-items: center; gap: 10px; min-width: max-content; white-space: nowrap; font-size: clamp(12px, 1.7vw, 18px); }
+  .formula-outcome { display: block; margin-top: 14px; color: var(--muted); font: 12px ui-sans-serif, system-ui, sans-serif; }
+  .implementation-rule { margin-top: 16px; padding: 15px 18px; border: 1px solid var(--line); border-radius: 10px; background: #f5f7f5; text-align: center; }
+  .implementation-rule strong { display: block; margin-bottom: 6px; font-size: 13px; }
+  .implementation-rule code { font-size: 13px; }
+  .implementation-rule + .caveats { margin-top: 16px; }
   .terms { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
   .term { padding: 16px 18px; color: #46514c; line-height: 1.5; font-size: 13px; }
   .term + .term { border-left: 1px solid var(--line); }
@@ -151,6 +159,7 @@
     .toc strong { display: none; }
     .toc a { flex: 0 0 auto; padding: 6px 9px; border: 0; border-radius: 6px; white-space: nowrap; }
     .toc a:hover, .toc a:focus-visible { border: 0; }
+    header[id], section[id] { scroll-margin-top: 64px; }
   }
   @media (max-width: 720px) {
     .wrap { width: min(100% - 22px, 1080px); }
@@ -170,14 +179,13 @@
 <main class="wrap">
   <nav class="toc" aria-label="Page sections">
     <strong>On this page</strong>
-    <a href="#overview">Overview</a>
+    <a href="#overview">Adaptive browser sessions</a>
     <a href="#change">What changes</a>
-    <a href="#signals">Cap evidence</a>
-    <a href="#scale-decision">Scale decision</a>
-    <a href="#examples">Examples</a>
-    <a href="#boundaries">Boundaries</a>
-    <a href="#loops">Queue loops</a>
-    <a href="#pool-state">Pool state</a>
+    <a href="#scale-decision">Scheduling principle</a>
+    <a href="#examples">Worked cap decisions</a>
+    <a href="#boundaries">Operational behavior</a>
+    <a href="#loops">Queue mechanics</a>
+    <a href="#pool-state">Pool state lifecycle</a>
     <a href="#completion">Completion</a>
     <a href="#call-chain">Call chain</a>
     <a href="#failure-mode">False-cap caveat</a>
@@ -239,28 +247,28 @@
     </div>
   </section>
 
-  <section id="signals">
-    <h2><a href="#signals">Evidence used to choose the cap</a></h2>
-    <div class="caveats">
-      <div class="caveat"><strong>Session-open cost</strong><p>Replaced after every completed open, so the latest page startup controls the next decision.</p></div>
-      <div class="caveat"><strong>Per-file EMA</strong><p><code>EMA = EMA * 0.7 + duration * 0.3</code>. Each session's first file is excluded because it also pays tester bootstrap cost.</p></div>
-    </div>
-  </section>
-
   <section id="scale-decision">
-    <h2><a href="#scale-decision">When the current session count becomes the cap</a></h2>
+    <h2><a href="#scale-decision">Scheduling principle</a></h2>
     <div class="rule">
-      <div class="formula"><span class="left">queueLen * fileCostEMA / openSessions</span> &lt;= <span class="right">2 * max(openCost, 100ms)</span><br><small>stop opening sessions</small></div>
-      <div class="terms">
-        <div class="term"><strong>Projected drain:</strong> estimated time for current sessions to consume the remaining queue.</div>
-        <div class="term"><strong>Dynamic cap:</strong> when projected drain falls below the threshold, the current session count becomes the effective cap for this batch.</div>
+      <div class="formula">
+        <div class="formula-principle"><span class="left">remaining files × observed time per file</span><span>÷</span><span>current worker count</span><span>≤</span><span class="right">observed worker startup time</span></div>
+        <span class="formula-outcome">If current workers can drain the queue within that startup window, keep the current worker count.</span>
       </div>
     </div>
-    <p class="state-note">Without contention, the natural cap begins at <code>projectedDrain &lt;= openCost</code>. The <code>2x</code> broadens that cap region: equivalently, it discounts projected drain by half or treats opening as twice as expensive. This deliberately favors fewer sessions when the estimated win is marginal. If the condition is false, opening continues toward hard <code>maxWorkers</code>.</p>
+    <div class="implementation-rule">
+      <strong>PR implementation</strong>
+      <code>queueLen × fileCostEMA ÷ openSessions ≤ 2 × max(openCost, 100 ms)</code>
+      <span class="formula-outcome">Stop opening sessions; otherwise continue toward hard <code>maxWorkers</code>.</span>
+    </div>
+    <div class="caveats">
+      <div class="caveat"><strong>Observed worker startup time</strong><p><code>openCost</code> is replaced after every completed open, so the latest browser worker startup controls the next decision.</p></div>
+      <div class="caveat"><strong>Observed time per file</strong><p><code>fileCostEMA = EMA * 0.7 + duration * 0.3</code>. Each session's first file is excluded because it also pays tester bootstrap cost.</p></div>
+    </div>
+    <p class="state-note">Without contention, the natural cap begins when estimated drain is no longer than observed startup. The implementation's <code>2×</code> broadens that cap region: equivalently, it discounts projected drain by half or treats opening as twice as expensive. The 100 ms floor avoids treating an unusually tiny startup sample as free.</p>
   </section>
 
   <section id="examples">
-    <h2><a href="#examples">Choosing the effective cap from 2 sessions</a></h2>
+    <h2><a href="#examples">Worked cap decisions</a></h2>
     <div class="scenarios">
       <article class="scenario">
         <div class="scenario-head">
@@ -279,7 +287,7 @@
           <div class="swim-row"><span class="swim-name">S3</span><div class="swim-track"><i class="swim-now" style="left:50%"></i><span class="swim-segment skipped" style="left:50%;width:50%">not opened</span></div></div>
           <div class="swim-axis"><span>-1000 ms</span><span>decision now</span><span>+1000 ms</span></div>
         </div>
-        <div class="decision-math"><span class="drain">8 * 200 / 2 = 800 ms</span> &lt;= <span class="threshold">2 * 500 = 1000 ms</span></div>
+        <div class="decision-math"><span class="drain">8 × 200 ÷ 2 = 800 ms</span> ≤ <span class="threshold">2 × 500 = 1000 ms</span></div>
         <div class="scenario-result stay"><strong>Cap at 2 sessions</strong>The two existing sessions are projected to drain the queue before opening S3 pays back its cost.</div>
       </article>
 
@@ -300,7 +308,7 @@
           <div class="swim-row"><span class="swim-name">S3</span><div class="swim-track"><i class="swim-now" style="left:45.5%"></i><span class="swim-segment opening" style="left:45.5%;width:22.7%">open 500</span><span class="swim-segment running" style="left:68.2%;width:9.1%">f11</span><span class="swim-segment running" style="left:77.3%;width:9.1%">f14</span></div></div>
           <div class="swim-axis"><span>-1000 ms</span><span>decision now</span><span>+1200 ms</span></div>
         </div>
-        <div class="decision-math"><span class="drain">12 * 200 / 2 = 1200 ms</span> &gt; <span class="threshold">2 * 500 = 1000 ms</span></div>
+        <div class="decision-math"><span class="drain">12 × 200 ÷ 2 = 1200 ms</span> &gt; <span class="threshold">2 × 500 = 1000 ms</span></div>
         <div class="scenario-result expand"><strong>Continue toward maxWorkers</strong>The projected queue drain exceeds the cap threshold, so S3 is expected to pay back its startup cost.</div>
       </article>
     </div>
@@ -318,7 +326,7 @@
   </section>
 
   <section id="loops">
-    <h2><a href="#loops">How the two loops share the queue</a></h2>
+    <h2><a href="#loops">Queue mechanics</a></h2>
     <div class="engines">
       <article class="engine open">
         <h3><code>scaleSessions</code></h3>
@@ -347,7 +355,7 @@
   </section>
 
   <section id="pool-state">
-    <h2><a href="#pool-state">How pool state progresses</a></h2>
+    <h2><a href="#pool-state">Pool state lifecycle</a></h2>
     <div class="state-scroll">
       <table class="state-table">
         <thead>
@@ -459,7 +467,7 @@
   </section>
 
   <section id="completion">
-    <h2><a href="#completion">When the run completes</a></h2>
+    <h2><a href="#completion">Completion</a></h2>
     <div class="completion">
       <code>!_scaling &amp;&amp; readySessions.size === orchestrators.size</code>
       <p>The run cannot resolve while a page is still opening. Both the final session and the scaling promise's <code>finally</code> path recheck this invariant, which covers either completion order. <a href="https://github.com/hi-ogawa/vitest/blob/55d210ef25bed70806600df8b4da8f99e7087a19/packages/vitest/src/node/pools/browser.ts#L398-L413">Source</a></p>
@@ -505,7 +513,7 @@
   </section>
 
   <section id="failure-mode">
-    <h2><a href="#failure-mode">Caveat: the heuristic can choose a false cap</a></h2>
+    <h2><a href="#failure-mode">False-cap caveat</a></h2>
     <div class="failure-card">
       <div class="scenario-head">
         <h3>Fast samples, slow remaining queue</h3>
@@ -527,8 +535,8 @@
       </div>
       </div>
       <p class="state-note" style="padding:0 16px">This is a linear time scale: the 500 ms opening and queued-file blocks have equal width, each 2.5 times wider than a 200 ms sample. Scroll horizontally to inspect the full 3.5-second run.</p>
-      <div class="decision-math"><span class="drain">estimated at decision: 8 * 200 / 2 = 800 ms</span> &lt;= <span class="threshold">1000 ms threshold</span> -> <strong>cap at 2</strong></div>
-      <div class="failure-explanation">The true queued-work estimate is <code>8 * 500 / 2 = 2000 ms</code>, so paying 500 ms for S3 would be worthwhile. The low EMA comes from files that finished early enough to be observed while sessions were opening. Once that estimate caps the pool, this batch never invokes <code>scaleSessions</code> again, even when later completions raise the EMA.</div>
+      <div class="decision-math"><span class="drain">estimated at decision: 8 × 200 ÷ 2 = 800 ms</span> ≤ <span class="threshold">1000 ms threshold</span> → <strong>cap at 2</strong></div>
+      <div class="failure-explanation">The true queued-work estimate is <code>8 × 500 ÷ 2 = 2000 ms</code>, so paying 500 ms for S3 would be worthwhile. The low EMA comes from files that finished early enough to be observed while sessions were opening. Once that estimate caps the pool, this batch never invokes <code>scaleSessions</code> again, even when later completions raise the EMA.</div>
     </div>
 
     <h3>Potential improvements</h3>
