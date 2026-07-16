@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stem mixer UI options · YouTube Audio Replacement</title>
+  <style>
+    :root {
+      --ink: #141414;
+      --muted: #626262;
+      --line: #d7d4ce;
+      --paper: #f7f6f2;
+      --surface: #ffffff;
+      --soft: #eeece6;
+      --blue: #065fd4;
+      --blue-soft: #e9f1fc;
+      --green: #147a52;
+      --green-soft: #e6f3ed;
+      --amber: #9a5b00;
+      --amber-soft: #fff1d7;
+      --red: #b3261e;
+      --shadow: 0 18px 50px rgba(26, 23, 17, .10);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: inherit; }
+    .wrap { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .toc { position: sticky; top: 14px; z-index: 20; width: 150px; height: 0; margin-left: auto; }
+    .toc summary { list-style: none; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 5px 18px rgba(0,0,0,.08); cursor: pointer; font-size: 12px; font-weight: 700; }
+    .toc summary::-webkit-details-marker { display: none; }
+    .toc nav { position: absolute; top: 42px; right: 0; width: 210px; padding: 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+    .toc nav a { display: block; padding: 7px 8px; border-radius: 6px; text-decoration: none; font-size: 12px; }
+    .toc nav a:hover { background: var(--soft); }
+    section[id] { scroll-margin-top: 76px; }
+    header { padding: 62px 0 34px; border-bottom: 1px solid var(--line); }
+    .eyebrow { color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    h1 { max-width: 820px; margin: 12px 0 14px; font-size: clamp(34px, 6vw, 62px); line-height: .98; letter-spacing: -.045em; }
+    .lead { max-width: 720px; margin: 0; color: var(--muted); font-size: 17px; }
+    .provenance { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .pill-link { padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); text-decoration: none; font-size: 12px; }
+    .pill-link:hover { border-color: var(--blue); color: var(--blue); }
+    section { padding: 42px 0; border-bottom: 1px solid var(--line); }
+    .section-head { display: grid; grid-template-columns: 220px 1fr; gap: 28px; margin-bottom: 25px; }
+    h2 { margin: 0; font-size: 25px; letter-spacing: -.025em; }
+    h2 a { text-decoration: none; }
+    .section-head p { max-width: 680px; margin: 3px 0 0; color: var(--muted); }
+    .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .fact { min-height: 105px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .fact strong { display: block; margin-bottom: 8px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+    .fact p { margin: 0; color: var(--muted); }
+    .option-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    .option { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 8px 25px rgba(30,25,16,.04); }
+    .option.recommended { border: 2px solid var(--green); }
+    .option-copy { padding: 17px 17px 14px; }
+    .option-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .letter { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 50%; background: var(--ink); color: white; font-weight: 800; }
+    .verdict { padding: 4px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; font-weight: 700; }
+    .recommended .verdict { background: var(--green-soft); color: var(--green); }
+    .option h3 { margin: 13px 0 5px; font-size: 20px; letter-spacing: -.02em; }
+    .option-copy > p { min-height: 60px; margin: 0; color: var(--muted); font-size: 13px; }
+    .stage { min-height: 420px; padding: 20px 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #e8e7e4; }
+    .panel { width: 300px; max-width: 100%; margin: 0 auto; padding: 10px; border: 1px solid #cfcfcf; border-radius: 9px; background: white; box-shadow: 0 7px 22px rgba(0,0,0,.18); color: #0f0f0f; font-size: 12px; }
+    .panel.wide { width: 330px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .panel-title { font-size: 14px; font-weight: 700; }
+    .toggle { display: flex; align-items: center; gap: 5px; color: #606060; }
+    .switch { position: relative; width: 36px; height: 20px; border-radius: 20px; background: var(--blue); }
+    .switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #777; }
+    .file { display: flex; align-items: center; gap: 8px; height: 52px; margin: 10px 0; padding: 8px 9px; border: 1px solid #c6c6c6; border-radius: 6px; background: #f2f2f2; }
+    .note { flex: 1; min-width: 0; }
+    .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .time { margin-top: 2px; color: #606060; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .change { color: #606060; }
+    .music { width: 20px; height: 20px; color: #606060; }
+    .channel { padding: 8px 0; border-top: 1px solid #e1e1e1; }
+    .channel:first-of-type { border-top: 0; }
+    .channel-line { display: flex; align-items: center; gap: 7px; }
+    .channel-name { width: 49px; overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .bar { position: relative; flex: 1; height: 4px; border-radius: 4px; background: #d8d8d8; }
+    .bar::before { content: ""; display: block; width: var(--level); height: 100%; border-radius: inherit; background: var(--blue); }
+    .bar::after { content: ""; position: absolute; top: 50%; left: var(--level); width: 11px; height: 11px; border-radius: 50%; background: var(--blue); transform: translate(-50%, -50%); }
+    .percent { width: 30px; color: #606060; text-align: right; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .control { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border: 1px solid #c6c6c6; border-radius: 5px; background: #f2f2f2; color: #444; font-size: 10px; font-weight: 800; }
+    .control.active-m { border-color: #999; background: #555; color: white; }
+    .control.active-s { border-color: var(--blue); background: var(--blue); color: white; }
+    .preset-row { display: flex; gap: 5px; margin: 8px 0 2px; }
+    .preset { flex: 1; padding: 6px 3px; border: 1px solid #c6c6c6; border-radius: 5px; background: #f2f2f2; text-align: center; font-size: 10px; }
+    .preset.active { border-color: #8ab4ec; background: var(--blue-soft); color: #064caa; font-weight: 700; }
+    .tabs { display: flex; gap: 4px; margin: 8px 0; overflow: hidden; }
+    .tab { flex: 1; padding: 6px 2px; border: 1px solid #ccc; border-radius: 5px; background: #f2f2f2; text-align: center; font-size: 10px; }
+    .tab.active { border-color: var(--blue); background: var(--blue); color: white; font-weight: 700; }
+    .focus { padding: 13px 10px 11px; border: 1px solid #d2d2d2; border-radius: 7px; }
+    .focus-title { display: flex; align-items: baseline; justify-content: space-between; }
+    .focus-title strong { font-size: 15px; }
+    .focus .bar { margin: 16px 4px 10px; }
+    .focus-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .focus-actions .control { width: auto; }
+    .strip-wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; height: 235px; margin-top: 8px; }
+    .strip { display: flex; min-width: 0; flex-direction: column; align-items: center; padding: 7px 3px; border: 1px solid #d5d5d5; border-radius: 6px; background: #fafafa; }
+    .strip-name { width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 700; }
+    .vbar { position: relative; width: 5px; flex: 1; margin: 12px 0; border-radius: 5px; background: #d8d8d8; }
+    .vbar::before { content: ""; position: absolute; bottom: 0; width: 100%; height: var(--level); border-radius: inherit; background: var(--blue); }
+    .vbar::after { content: ""; position: absolute; bottom: var(--level); left: 50%; width: 13px; height: 8px; border-radius: 3px; background: var(--blue); transform: translate(-50%, 50%); }
+    .strip .percent { width: auto; margin-bottom: 5px; }
+    .strip-buttons { display: flex; gap: 3px; }
+    .strip .control { width: 22px; height: 22px; }
+    .option-notes { padding: 14px 17px 17px; }
+    .score { display: grid; grid-template-columns: 92px 1fr; gap: 6px; margin-bottom: 7px; font-size: 12px; }
+    .score span:first-child { color: var(--muted); }
+    .meter { display: flex; gap: 3px; align-items: center; }
+    .meter i { display: block; width: 17px; height: 5px; border-radius: 2px; background: #ddd; }
+    .meter i.on { background: var(--ink); }
+    .proscons { margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 12px; }
+    .proscons li { margin-top: 5px; }
+    .proscons b { color: var(--ink); }
+    .two-stem { display: grid; grid-template-columns: minmax(280px, 370px) 1fr; gap: 28px; align-items: center; }
+    .scenario { padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .scenario h3 { margin: 0 0 6px; font-size: 20px; }
+    .scenario p { margin: 0 0 16px; color: var(--muted); }
+    .scenario-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .scenario-card { padding: 14px; border-radius: 9px; background: var(--soft); }
+    .scenario-card strong { display: block; margin-bottom: 6px; }
+    .scenario-card span { color: var(--muted); font-size: 12px; }
+    .rec { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
+    .rec-main { padding: 26px; border-radius: 14px; background: #173a2c; color: white; }
+    .rec-main .eyebrow { color: #8fe0bd; }
+    .rec-main h3 { margin: 8px 0 10px; font-size: 29px; letter-spacing: -.03em; }
+    .rec-main p { margin: 0; color: #cce2d8; }
+    .rec-side { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    .rec-side h3 { margin: 0 0 12px; font-size: 16px; }
+    .rec-side ol { margin: 0; padding-left: 20px; color: var(--muted); }
+    .rec-side li { margin: 8px 0; padding-left: 4px; }
+    .handoff { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .decision { padding: 17px; border-left: 3px solid var(--line); background: var(--surface); }
+    .decision strong { display: block; margin-bottom: 6px; }
+    .decision p { margin: 0; color: var(--muted); font-size: 13px; }
+    footer { padding: 30px 0 50px; color: var(--muted); font-size: 12px; }
+    code { padding: 2px 4px; border-radius: 4px; background: var(--soft); color: var(--ink); }
+    @media (max-width: 900px) {
+      .option-grid { grid-template-columns: 1fr; }
+      .option { display: grid; grid-template-columns: 1fr 1fr; }
+      .option-copy, .option-notes { grid-column: 2; }
+      .stage { grid-column: 1; grid-row: 1 / span 2; border-top: 0; border-right: 1px solid var(--line); border-bottom: 0; }
+      .option-copy > p { min-height: 0; }
+      .facts, .handoff { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 650px) {
+      .wrap { width: min(100% - 22px, 1180px); }
+      header { padding-top: 48px; }
+      .section-head, .two-stem, .rec { grid-template-columns: 1fr; }
+      .option { display: block; }
+      .stage { border-right: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+      .option-copy, .option-notes { grid-column: auto; }
+      .scenario-row { grid-template-columns: 1fr; }
+      .toc { right: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <details class="toc">
+      <summary>Contents</summary>
+      <nav aria-label="Page sections">
+        <a href="#constraints">UI constraints</a>
+        <a href="#options">Three options</a>
+        <a href="#two-stem">Two-stem state</a>
+        <a href="#recommendation">Recommendation</a>
+        <a href="#decisions">Resolved defaults</a>
+      </nav>
+    </details>
+
+    <header>
+      <div class="eyebrow">UI exploration · Issue 8</div>
+      <h1>A stem mixer that stays out of the video’s way.</h1>
+      <p class="lead">Three layouts for adding per-track volume, mute, and solo to the existing bottom-right YouTube panel. All preserve YouTube as the transport and preserve the current single-audio flow.</p>
+      <div class="provenance">
+        <a class="pill-link" href="https://github.com/hi-ogawa/youtube-audio-replacement/issues/8">GitHub issue #8</a>
+        <a class="pill-link" href="https://github.com/hi-ogawa/youtube-audio-replacement/blob/ecb4a81e2882422a75452ad6d724de9734328f71/src/ui/audio-replacement.tsx#L177-L218">Current panel</a>
+        <a class="pill-link" href="https://github.com/hi-ogawa/youtube-audio-replacement/blob/ecb4a81e2882422a75452ad6d724de9734328f71/src/ui/audio-replacement.tsx#L253-L342">Current file drop</a>
+      </div>
+    </header>
+
+    <section id="constraints">
+      <div class="section-head">
+        <h2><a href="#constraints">UI constraints</a></h2>
+        <p>The existing 300 px panel is a useful constraint. Four channels need to be legible without turning the extension into a DAW or covering a meaningful portion of the video.</p>
+      </div>
+      <div class="facts">
+        <article class="fact"><strong>Keep stable</strong><p>Panel title, global On/Off, file or ZIP selector, floating speaker button, and YouTube-driven transport.</p></article>
+        <article class="fact"><strong>Add</strong><p>A channel name derived from its ZIP entry basename, volume value, Mute, and Solo, plus clear effective state.</p></article>
+        <article class="fact"><strong>Avoid</strong><p>Waveforms, pan, metering, offsets, effects, master transport, and controls that imply unsupported DAW behavior.</p></article>
+      </div>
+    </section>
+
+    <section id="options">
+      <div class="section-head">
+        <h2><a href="#options">Three options</a></h2>
+        <p>Each panel shows the same four-stem transcription mix: bass soloed at 100%, drums and other retained at lower levels, and vocals muted. The difference is how directly the full state can be inspected and changed.</p>
+      </div>
+      <div class="option-grid">
+        <article class="option recommended">
+          <div class="option-copy">
+            <div class="option-top"><span class="letter">A</span><span class="verdict">Recommended</span></div>
+            <h3>Compact channel rows</h3>
+            <p>Every channel and control remains visible. The panel grows vertically but preserves its current width and mental model.</p>
+          </div>
+          <div class="stage">
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">Audio replacement</span><span class="toggle">On <span class="switch"></span></span></div>
+              <div class="file">
+                <svg class="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>
+                <span class="note"><span class="file-name">track-stems.zip</span><span class="time">1:42 / 4:32</span></span><span class="change">Change</span>
+              </div>
+              <div class="channel"><div class="channel-line"><span class="channel-name">Vocals</span><span class="bar" style="--level:72%"></span><span class="percent">72%</span><button class="control active-m" type="button" title="Mute Vocals" aria-label="Mute Vocals">M</button><button class="control" type="button" title="Solo Vocals" aria-label="Solo Vocals">S</button></div></div>
+              <div class="channel"><div class="channel-line"><span class="channel-name">Drums</span><span class="bar" style="--level:65%"></span><span class="percent">65%</span><button class="control" type="button" title="Mute Drums" aria-label="Mute Drums">M</button><button class="control" type="button" title="Solo Drums" aria-label="Solo Drums">S</button></div></div>
+              <div class="channel"><div class="channel-line"><span class="channel-name">Bass</span><span class="bar" style="--level:100%"></span><span class="percent">100%</span><button class="control" type="button" title="Mute Bass" aria-label="Mute Bass">M</button><button class="control active-s" type="button" title="Solo Bass" aria-label="Solo Bass">S</button></div></div>
+              <div class="channel"><div class="channel-line"><span class="channel-name">Other</span><span class="bar" style="--level:55%"></span><span class="percent">55%</span><button class="control" type="button" title="Mute Other" aria-label="Mute Other">M</button><button class="control" type="button" title="Solo Other" aria-label="Solo Other">S</button></div></div>
+            </div>
+          </div>
+          <div class="option-notes">
+            <div class="score"><span>At-a-glance</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+            <div class="score"><span>Compactness</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <div class="score"><span>Control speed</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+            <ul class="proscons"><li><b>Best:</b> frequent mixing and four-stem scanning.</li><li><b>Cost:</b> needs careful touch targets and truncated long names.</li></ul>
+          </div>
+        </article>
+
+        <article class="option">
+          <div class="option-copy">
+            <div class="option-top"><span class="letter">B</span><span class="verdict">Calmest</span></div>
+            <h3>Focused channel editor</h3>
+            <p>Select one stem, then edit it in a larger control area. Lower density, but hidden values make comparison slower.</p>
+          </div>
+          <div class="stage">
+            <div class="panel">
+              <div class="panel-head"><span class="panel-title">Audio replacement</span><span class="toggle">On <span class="switch"></span></span></div>
+              <div class="file">
+                <svg class="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>
+                <span class="note"><span class="file-name">track-stems.zip</span><span class="time">1:42 / 4:32</span></span><span class="change">Change</span>
+              </div>
+              <div class="tabs"><span class="tab">Vocals</span><span class="tab">Drums</span><span class="tab active">Bass</span><span class="tab">Other</span></div>
+              <div class="focus">
+                <div class="focus-title"><strong>Bass</strong><span class="percent">100%</span></div>
+                <div class="bar" style="--level:100%"></div>
+                <div class="focus-actions"><span class="control">Mute</span><span class="control active-s">Solo</span></div>
+              </div>
+              <div class="preset-row"><span class="preset">Practice</span><span class="preset active">Transcribe</span><span class="preset">Reset</span></div>
+            </div>
+          </div>
+          <div class="option-notes">
+            <div class="score"><span>At-a-glance</span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+            <div class="score"><span>Compactness</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+            <div class="score"><span>Control speed</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></div>
+            <ul class="proscons"><li><b>Best:</b> infrequent changes and larger targets.</li><li><b>Cost:</b> switching tabs to inspect or compare all levels.</li></ul>
+          </div>
+        </article>
+
+        <article class="option">
+          <div class="option-copy">
+            <div class="option-top"><span class="letter">C</span><span class="verdict">Most familiar</span></div>
+            <h3>Mini mixer strips</h3>
+            <p>A recognizable audio mixer, using vertical faders. Strong visual grouping, but cramped at extension-panel scale.</p>
+          </div>
+          <div class="stage">
+            <div class="panel wide">
+              <div class="panel-head"><span class="panel-title">Audio replacement</span><span class="toggle">On <span class="switch"></span></span></div>
+              <div class="file">
+                <svg class="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>
+                <span class="note"><span class="file-name">track-stems.zip</span><span class="time">1:42 / 4:32</span></span><span class="change">Change</span>
+              </div>
+              <div class="strip-wrap">
+                <div class="strip"><span class="strip-name">Vocals</span><span class="vbar" style="--level:72%"></span><span class="percent">72%</span><span class="strip-buttons"><span class="control active-m">M</span><span class="control">S</span></span></div>
+                <div class="strip"><span class="strip-name">Drums</span><span class="vbar" style="--level:65%"></span><span class="percent">65%</span><span class="strip-buttons"><span class="control">M</span><span class="control">S</span></span></div>
+                <div class="strip"><span class="strip-name">Bass</span><span class="vbar" style="--level:100%"></span><span class="percent">100%</span><span class="strip-buttons"><span class="control">M</span><span class="control active-s">S</span></span></div>
+                <div class="strip"><span class="strip-name">Other</span><span class="vbar" style="--level:55%"></span><span class="percent">55%</span><span class="strip-buttons"><span class="control">M</span><span class="control">S</span></span></div>
+              </div>
+            </div>
+          </div>
+          <div class="option-notes">
+            <div class="score"><span>At-a-glance</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <div class="score"><span>Compactness</span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+            <div class="score"><span>Control speed</span><span class="meter"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></div>
+            <ul class="proscons"><li><b>Best:</b> users who already think in mixer strips.</li><li><b>Cost:</b> taller, wider, and harder to target precisely.</li></ul>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="two-stem">
+      <div class="section-head">
+        <h2><a href="#two-stem">Two-stem state</a></h2>
+        <p>The common practice and transcription use cases should require one obvious action. Compact rows make those states visually explicit without adding a separate preset system in the first version.</p>
+      </div>
+      <div class="two-stem">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Audio replacement</span><span class="toggle">On <span class="switch"></span></span></div>
+          <div class="file"><svg class="music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg><span class="note"><span class="file-name">bass-stems.zip</span><span class="time">1:42 / 4:32</span></span><span class="change">Change</span></div>
+          <div class="channel"><div class="channel-line"><span class="channel-name">Bass</span><span class="bar" style="--level:100%"></span><span class="percent">100%</span><button class="control active-m" type="button" title="Mute Bass" aria-label="Mute Bass">M</button><button class="control" type="button" title="Solo Bass" aria-label="Solo Bass">S</button></div></div>
+          <div class="channel"><div class="channel-line"><span class="channel-name">Backing</span><span class="bar" style="--level:100%"></span><span class="percent">100%</span><button class="control" type="button" title="Mute Backing" aria-label="Mute Backing">M</button><button class="control" type="button" title="Solo Backing" aria-label="Solo Backing">S</button></div></div>
+        </div>
+        <div class="scenario">
+          <h3>One model, two obvious mixes</h3>
+          <p>No special mode machinery is required because the same Mute and Solo controls express both outcomes.</p>
+          <div class="scenario-row">
+            <div class="scenario-card"><strong>Practice</strong><span>Mute <code>bass</code>. Keep <code>backing</code> at the preferred level.</span></div>
+            <div class="scenario-card"><strong>Transcribe</strong><span>Solo <code>bass</code>, or raise bass while lowering <code>backing</code>.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="recommendation">
+      <div class="section-head">
+        <h2><a href="#recommendation">Recommendation</a></h2>
+        <p>Start with option A. It aligns with the issue’s simple-mixer scope, keeps all state inspectable, and maps directly to an ID-keyed list of track controls.</p>
+      </div>
+      <div class="rec">
+        <div class="rec-main">
+          <div class="eyebrow">Ship first</div>
+          <h3>Compact rows, no presets yet.</h3>
+          <p>Use a 300 px panel, 24 px M/S buttons with title tooltips, a horizontal range, visible percentage, and full stem name in a tooltip. Do not add a mixer header or track count. Preserve one global On/Off switch.</p>
+        </div>
+        <div class="rec-side">
+          <h3>Interaction rules</h3>
+          <ol>
+            <li>Mute is independent per track.</li>
+            <li>Any active Solo makes all non-solo tracks effectively muted.</li>
+            <li>Multiple tracks may be soloed together.</li>
+            <li>Muted and soloed state remains visibly distinct.</li>
+            <li>Global Off restores normal YouTube audio without changing the saved mix.</li>
+            <li>Display names remove the ZIP entry's path and final extension, then capitalize the first character.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head">
+        <h2><a href="#decisions">Resolved defaults</a></h2>
+        <p>These conservative choices keep the first version aligned with the issue and preserve the current single-audio experience.</p>
+      </div>
+      <div class="handoff">
+        <article class="decision"><strong>YouTube stays outside</strong><p>Original YouTube audio remains muted while replacement is On. It is not represented as another mixer channel.</p></article>
+        <article class="decision"><strong>Stem gain starts at 100%</strong><p>Every imported stem begins at unity gain. YouTube’s volume remains the shared output level, so stored track gains describe only the mix balance.</p></article>
+        <article class="decision"><strong>Single files stay simple</strong><p>An ordinary non-ZIP audio file retains the existing standalone Volume row. Mute duplicates global Off and Solo has no effect when there is only one track.</p></article>
+      </div>
+    </section>
+
+    <footer>
+      Static UI exploration based on repository commit <code>ecb4a81</code>. Illustrative values are not measurements. No runtime JavaScript or external assets.
+    </footer>
+  </main>
+</body>
+</html>
