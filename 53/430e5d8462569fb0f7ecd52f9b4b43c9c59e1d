@@ -1,0 +1,19 @@
+src/youtube-audio-replacement-mixer-options.html
+  s_7cb158cc355525::t_53abf5491f3adc 1-360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "53430e5d8462569fb0f7ecd52f9b4b43c9c59e1d",
+  "prompts": {},
+  "sessions": {
+    "s_7cb158cc355525": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_07ddf6df7ffekmBugp2MyJIoJw",
+        "model": "gpt-5.6"
+      },
+      "human_author": "Hiroshi Ogawa <4232207+hi-ogawa@users.noreply.github.com>"
+    }
+  }
+}
