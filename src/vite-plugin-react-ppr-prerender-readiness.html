@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PPR prerender context: readiness inside a completion race</title>
+<style>
+  :root {
+    --bg: #f8f7f3;
+    --surface: #fff;
+    --ink: #20201d;
+    --muted: #68675f;
+    --line: #deddd5;
+    --react: #276a8a;
+    --react-bg: #e8f2f7;
+    --cache: #9a6417;
+    --cache-bg: #fbf0d9;
+    --dynamic: #9b3f69;
+    --dynamic-bg: #f8e9f0;
+    --ready: #34734d;
+    --ready-bg: #e7f3ea;
+    --danger: #9a3636;
+    --danger-bg: #f8e8e6;
+    --code: #f0eee7;
+    --toc-width: 220px;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--react); }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--code);
+    font-size: .9em;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 30px 22px 70px; }
+  h1 { margin: 0 0 5px; font-size: 27px; letter-spacing: -.45px; }
+  h2 {
+    margin: 38px 0 14px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--line);
+    font-size: 18px;
+    letter-spacing: -.15px;
+  }
+  h2[id] { scroll-margin-top: 28px; }
+  h2 a { color: inherit; text-decoration: none; }
+  h2 a::after { content: " #"; color: #aaa89e; opacity: 0; font-weight: 400; }
+  h2 a:hover::after, h2 a:focus-visible::after { opacity: 1; }
+  h3 { margin: 0 0 7px; font-size: 14px; }
+  p { margin: 7px 0; }
+  .subtitle { margin: 0 0 14px; max-width: 790px; color: var(--muted); }
+  .provenance { display: flex; flex-wrap: wrap; gap: 7px; margin: 15px 0 22px; }
+  .provenance a {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    text-decoration: none;
+    font-size: 12px;
+  }
+  .toc {
+    position: sticky;
+    top: 16px;
+    z-index: 20;
+    width: var(--toc-width);
+    height: 0;
+    margin-left: auto;
+  }
+  .toc summary {
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(255,255,255,.97);
+    box-shadow: 0 5px 18px rgba(30,30,25,.10);
+    cursor: pointer;
+    list-style: none;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .toc summary::-webkit-details-marker { display: none; }
+  .toc nav {
+    position: absolute;
+    top: 45px;
+    right: 0;
+    width: 100%;
+    padding: 7px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(255,255,255,.99);
+    box-shadow: 0 12px 30px rgba(30,30,25,.13);
+  }
+  .toc nav a {
+    display: block;
+    padding: 6px 8px;
+    border-radius: 4px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 12px;
+  }
+  .toc nav a:hover, .toc nav a:focus-visible { background: var(--react-bg); color: var(--ink); }
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .invariant, .not-this {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 18px;
+  }
+  .invariant { border-left: 5px solid var(--ready); }
+  .invariant .formula {
+    margin: 12px 0;
+    padding: 13px 15px;
+    border-radius: 7px;
+    background: var(--ready-bg);
+    color: #225537;
+    font: 700 17px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .not-this { background: #fffdf8; }
+  .not-this strong { color: var(--danger); }
+  .legend { display: flex; flex-wrap: wrap; gap: 13px; margin: 15px 0 4px; color: var(--muted); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; }
+  .react { background: var(--react); }
+  .cache { background: var(--cache); }
+  .dynamic { background: var(--dynamic); }
+  .ready { background: var(--ready); }
+  .diagram {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 14px;
+  }
+  .diagram svg { display: block; width: 100%; min-width: 790px; height: auto; }
+  .step-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+  .step {
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 13px 14px;
+  }
+  .step.cache-step { border-top-color: var(--cache); }
+  .step.dynamic-step { border-top-color: var(--dynamic); }
+  .step.ready-step { border-top-color: var(--ready); }
+  .step p { color: #44433e; font-size: 13px; }
+  .code-panel {
+    margin: 14px 0;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .code-title { padding: 7px 11px; background: #eae8e0; color: var(--muted); font-size: 12px; }
+  pre { margin: 0; padding: 15px; overflow-x: auto; background: #f4f2ec; font-size: 12.5px; line-height: 1.55; }
+  .passes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pass {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 16px;
+  }
+  .pass:first-child { border-top: 5px solid var(--cache); }
+  .pass:last-child { border-top: 5px solid var(--react); }
+  .sequence { display: grid; gap: 7px; margin: 12px 0 5px; }
+  .sequence div { padding: 8px 10px; border-radius: 6px; background: var(--code); font-size: 12.5px; }
+  .sequence .fill { background: var(--cache-bg); color: #6b440e; }
+  .sequence .cut { background: var(--dynamic-bg); color: #73304e; }
+  .sequence .use { background: var(--react-bg); color: #1f5873; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+  table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  th { background: #efede6; color: var(--muted); font-size: 11px; letter-spacing: .3px; }
+  tr:last-child td { border-bottom: 0; }
+  .risk { color: var(--danger); font-weight: 650; }
+  details.note { margin: 13px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  details.note summary { padding: 10px 13px; cursor: pointer; font-weight: 650; }
+  details.note div { padding: 0 13px 13px; color: #44433e; }
+  .foot { margin-top: 34px; padding-top: 13px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  @media (max-width: 760px) {
+    .wrap { padding: 22px 15px 54px; }
+    .hero, .passes { grid-template-columns: 1fr; }
+    .step-grid { grid-template-columns: 1fr; }
+    .toc { width: 185px; }
+    h1 { font-size: 23px; padding-right: 54px; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <details class="toc">
+    <summary>Contents</summary>
+    <nav aria-label="Page sections">
+      <a href="#mental-model">Mental model</a>
+      <a href="#timeline">Event timeline</a>
+      <a href="#outcomes">Outcome contrasts</a>
+      <a href="#real-analogy">Production elaboration</a>
+      <a href="#two-passes">Why two passes</a>
+      <a href="#approximations">Runtime approximations</a>
+    </nav>
+  </details>
+
+  <h1>PPR prerender context: readiness inside a completion race</h1>
+  <p class="subtitle">The readiness gate is only one branch of the decision. Natural completion proves a route is fully static; readiness proves an unfinished render has reached an intentional dynamic hole after all discovered cache work settled.</p>
+  <div class="provenance">
+    <a href="https://github.com/vitejs/vite-plugin-react/tree/3ec1aa8f7d165150d4ec80d8b0cce365a41293b8/packages/plugin-rsc/examples/ppr">PPR example @ 3ec1aa8</a>
+    <a href="https://github.com/vitejs/vite-plugin-react/blob/3ec1aa8f7d165150d4ec80d8b0cce365a41293b8/packages/plugin-rsc/examples/ppr/src/framework/prerender-context.ts">prerender-context.ts</a>
+    <a href="vite-plugin-react-ppr-component-flow.html">Companion: component flow</a>
+    <a href="https://github.com/vitejs/vite-plugin-react/issues/948">Issue #948</a>
+    <a href="https://github.com/vercel/next.js/blob/153bf8ac5fa00888ef5fbb2b65cac12f0942a44f/packages/next/src/server/app-render/cache-signal.ts">Next.js CacheSignal</a>
+    <a href="https://github.com/vercel/next.js/blob/153bf8ac5fa00888ef5fbb2b65cac12f0942a44f/packages/next/src/server/app-render/app-render.tsx#L8381-L8490">Next.js prior art</a>
+    <a href="https://github.com/cloudflare/vinext/blob/fd1cc3d3ddaaec8c130d5e4bcae3a6f761089756/packages/vinext/src/shims/ppr-fallback-shell.ts#L94-L120">vinext final abort gate</a>
+  </div>
+
+  <section id="mental-model">
+    <h2><a href="#mental-model">Mental model</a></h2>
+    <div class="hero">
+      <div class="invariant">
+        <h3>The complete decision</h3>
+        <div class="formula">result completes || ready(dynamic hole + cache idle + retry)</div>
+        <p><code>ready</code> is not expected to resolve for every render. It certifies when an unfinished render can be cut off as intentionally partial; <code>result</code> independently handles natural static completion.</p>
+      </div>
+      <div class="not-this">
+        <h3>Two valid outcomes</h3>
+        <p><strong>Result wins:</strong> the render closed naturally and is fully static.</p>
+        <p><strong>Ready wins:</strong> a dynamic hole was observed, cache fills settled, and React received a retry turn.</p>
+        <p><strong>Then:</strong> abort the pass and preserve its partial output.</p>
+      </div>
+    </div>
+    <div class="legend" aria-label="Diagram legend">
+      <span><i class="swatch react"></i> React / RSC scheduling</span>
+      <span><i class="swatch cache"></i> tracked cache work</span>
+      <span><i class="swatch dynamic"></i> dynamic frontier</span>
+      <span><i class="swatch ready"></i> readiness and cutoff</span>
+    </div>
+  </section>
+
+  <section id="timeline">
+    <h2><a href="#timeline">Event timeline</a></h2>
+    <p>This timeline follows the partial branch where <code>ready</code> wins. On a fully static route, <code>result</code> completes instead and the pass is never aborted by this gate.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 980 330" role="img" aria-labelledby="timeline-title timeline-desc">
+        <title id="timeline-title">Partial prerender branch event timeline</title>
+        <desc id="timeline-desc">On the ready branch, React starts in async local storage, cache work is tracked, the dynamic boundary is reached, cache work settles, one stabilization task runs, and the prerender is aborted.</desc>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#77756d" />
+          </marker>
+        </defs>
+        <line x1="95" y1="75" x2="920" y2="75" stroke="#c9c7be" stroke-width="2" marker-end="url(#arrow)" />
+        <text x="22" y="80" fill="#68675f" font-size="13">time</text>
+
+        <g transform="translate(90 38)">
+          <circle cx="0" cy="37" r="9" fill="#276a8a" />
+          <rect x="-55" y="66" width="112" height="55" rx="7" fill="#e8f2f7" stroke="#a9cbdc" />
+          <text x="1" y="87" text-anchor="middle" fill="#1f5873" font-size="12" font-weight="700">enter ALS</text>
+          <text x="1" y="105" text-anchor="middle" fill="#526d79" font-size="11">start prerender</text>
+        </g>
+
+        <g transform="translate(265 38)">
+          <circle cx="0" cy="37" r="9" fill="#9a6417" />
+          <rect x="-64" y="66" width="128" height="70" rx="7" fill="#fbf0d9" stroke="#e3c985" />
+          <text x="0" y="87" text-anchor="middle" fill="#6b440e" font-size="12" font-weight="700">track work</text>
+          <text x="0" y="105" text-anchor="middle" fill="#735d38" font-size="11">pendingWork +1</text>
+          <text x="0" y="122" text-anchor="middle" fill="#735d38" font-size="11">cache starts</text>
+        </g>
+
+        <g transform="translate(445 38)">
+          <circle cx="0" cy="37" r="9" fill="#9b3f69" />
+          <rect x="-69" y="66" width="138" height="70" rx="7" fill="#f8e9f0" stroke="#dfb3c7" />
+          <text x="0" y="87" text-anchor="middle" fill="#73304e" font-size="12" font-weight="700">markDynamic</text>
+          <text x="0" y="105" text-anchor="middle" fill="#795266" font-size="11">dynamicReached = true</text>
+          <text x="0" y="122" text-anchor="middle" fill="#795266" font-size="11">await forever</text>
+        </g>
+
+        <g transform="translate(620 38)">
+          <circle cx="0" cy="37" r="9" fill="#9a6417" />
+          <rect x="-65" y="66" width="130" height="70" rx="7" fill="#fbf0d9" stroke="#e3c985" />
+          <text x="0" y="87" text-anchor="middle" fill="#6b440e" font-size="12" font-weight="700">cache settles</text>
+          <text x="0" y="105" text-anchor="middle" fill="#735d38" font-size="11">pendingWork -1</text>
+          <text x="0" y="122" text-anchor="middle" fill="#735d38" font-size="11">notify waiters</text>
+        </g>
+
+        <g transform="translate(785 38)">
+          <circle cx="0" cy="37" r="9" fill="#34734d" />
+          <rect x="-61" y="66" width="122" height="70" rx="7" fill="#e7f3ea" stroke="#a7cfb2" />
+          <text x="0" y="87" text-anchor="middle" fill="#225537" font-size="12" font-weight="700">stabilize</text>
+          <text x="0" y="105" text-anchor="middle" fill="#476c54" font-size="11">setTimeout(0)</text>
+          <text x="0" y="122" text-anchor="middle" fill="#476c54" font-size="11">recheck gate</text>
+        </g>
+
+        <g transform="translate(920 38)">
+          <circle cx="0" cy="37" r="9" fill="#34734d" />
+          <rect x="-49" y="66" width="98" height="70" rx="7" fill="#e7f3ea" stroke="#a7cfb2" />
+          <text x="0" y="87" text-anchor="middle" fill="#225537" font-size="12" font-weight="700">ready</text>
+          <text x="0" y="105" text-anchor="middle" fill="#476c54" font-size="11">race wins</text>
+          <text x="0" y="122" text-anchor="middle" fill="#476c54" font-size="11">abort pass</text>
+        </g>
+
+        <rect x="206" y="215" width="458" height="66" rx="8" fill="#fffdf8" stroke="#deddd5" />
+        <text x="226" y="239" fill="#20201d" font-size="13" font-weight="700">Why the demo needs this flag</text>
+        <text x="226" y="260" fill="#68675f" font-size="12">It proves unfinished output is an intentional dynamic hole, not merely incomplete static work.</text>
+        <path d="M 445 174 C 445 197 435 201 435 215" fill="none" stroke="#9b3f69" stroke-width="2" marker-end="url(#arrow)" />
+      </svg>
+    </div>
+
+    <div class="step-grid">
+      <div class="step cache-step">
+        <h3>1. Explicit tracking only</h3>
+        <p><code>trackPrerenderWork</code> adds the cache promise to a request-local set and removes it on either fulfillment or rejection. Rejection must remove it too, or readiness deadlocks.</p>
+      </div>
+      <div class="step dynamic-step">
+        <h3>2. Intentional partiality</h3>
+        <p><code>markDynamic</code> creates the hanging request-time hole. <code>dynamicReached</code> records the corresponding evidence that eventual cutoff is intentional.</p>
+      </div>
+      <div class="step ready-step">
+        <h3>3. Stabilize, then cut</h3>
+        <p>One task turn gives React a chance to observe cache completion and reveal more work. The gate is checked again before readiness resolves.</p>
+      </div>
+    </div>
+
+    <div class="code-panel">
+      <div class="code-title">The full decision, including natural completion</div>
+      <pre><span style="color:#276a8a">result = startPrerender()</span>
+
+<span style="color:#9a6417">trackPrerenderWork(cachePromise)</span>
+
+<span style="color:#9b3f69">await markDynamic() // never resolves during prerender</span>
+
+<span style="color:#34734d">dynamicReached &amp;&amp; pendingWork.size === 0
+  -&gt; wait one task
+  -&gt; check again
+  -&gt; ready</span>
+
+<span style="color:#276a8a">Promise.race([result, ready])
+  result -&gt; fully static
+  ready  -&gt; abort and retain partial output</span></pre>
+    </div>
+  </section>
+
+  <section id="outcomes">
+    <h2><a href="#outcomes">Concrete outcome contrasts</a></h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Render shape</th><th>What happens</th><th>Race outcome</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Fully static tree</td>
+            <td>Cache fills settle and the RSC stream closes. <code>dynamicReached</code> stays false, so <code>ready</code> remains pending.</td>
+            <td><code>result</code> wins</td>
+            <td>The pass completed naturally and must not be aborted.</td>
+          </tr>
+          <tr>
+            <td>Static shell with a dynamic child</td>
+            <td><code>markDynamic</code> records the hole and hangs. Independent cache fills settle, React receives one retry turn, and the gate remains true.</td>
+            <td><code>ready</code> wins</td>
+            <td>The unfinished stream is intentionally partial, so abort preserves the shell.</td>
+          </tr>
+          <tr>
+            <td>Dynamic child reached before a sibling cache fill completes</td>
+            <td><code>dynamicReached</code> is true, but <code>pendingWork.size &gt; 0</code> keeps readiness blocked until the sibling's static output is available.</td>
+            <td><code>ready</code> wins later</td>
+            <td>The dynamic frontier does not truncate useful independent static work.</td>
+          </tr>
+          <tr>
+            <td>Dynamic access inside tracked cache work</td>
+            <td>The cache fill itself waits forever on <code>markDynamic</code>, so <code>pendingWork</code> cannot become empty.</td>
+            <td>Neither branch wins</td>
+            <td class="risk">Invalid cache usage; a production framework should detect the cache scope and report an error.</td>
+          </tr>
+          <tr>
+            <td>Unmarked arbitrary hanging promise</td>
+            <td>The stream does not close and no framework dynamic boundary certifies why it is pending.</td>
+            <td>Neither branch wins</td>
+            <td class="risk">Unsupported user suspension; framework-owned dynamic APIs are part of the contract.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="real-analogy">
+    <h2><a href="#real-analogy">How production elaborates the same concepts</a></h2>
+    <div class="step-grid">
+      <div class="step cache-step">
+        <h3>1. Warmup quiescence</h3>
+        <p><b>Next.js:</b> <code>CacheSignal.beginRead/endRead</code>, pending module tracking, and a scheduler-aware settle window. Initial count zero still waits long enough for React to discover reads.</p>
+        <p><b>Demo:</b> <code>pendingWork</code> tracks cache fills, and one <code>setTimeout(0)</code> provides an approximate settle window before rechecking.</p>
+      </div>
+      <div class="step dynamic-step">
+        <h3>2. Dynamic-hole semantics</h3>
+        <p><b>Demo and vinext:</b> <code>dynamicReached</code> / <code>hasDynamicBoundary</code> explicitly witness an intentional dynamic hole.</p>
+        <p><b>Next.js:</b> staged dynamic inputs remain unresolved; a stream still pending after the permitted static work provides equivalent evidence.</p>
+      </div>
+      <div class="step ready-step">
+        <h3>3. Final cutoff scheduling</h3>
+        <p><b>Next.js:</b> uses controlled React tasks before inspecting and aborting a still-pending stream.</p>
+        <p><b>Demo:</b> one task turn approximates that scheduling detail; the outer race still lets a fully static render finish naturally.</p>
+      </div>
+    </div>
+    <div class="code-panel">
+      <div class="code-title">The transferable conceptual split</div>
+      <pre><span style="color:#276a8a">completion:</span> render closes naturally -&gt; fully static
+
+<span style="color:#9a6417">cache readiness:</span> discovered useful static work is quiescent
+
+<span style="color:#9b3f69">dynamic witness:</span> unfinished output is an intentional request-time hole
+
+<span style="color:#34734d">cutoff:</span> after a retry window, abort only when readiness wins</pre>
+    </div>
+    <details class="note" open>
+      <summary>Is <code>dynamicReached</code> necessary?</summary>
+      <div><b>Some equivalent evidence is necessary before intentionally cutting off unfinished output.</b> The demo and vinext record that evidence explicitly with a boolean. Next.js derives it by observing that the stream remains pending after all work permitted in its static scheduling window. The representation differs, but the conceptual condition remains.</div>
+    </details>
+    <details class="note">
+      <summary>The missing nested-cache case</summary>
+      <div>If tracked cache work itself calls <code>markDynamic</code>, its fill remains pending forever and deadlocks readiness. This is invalid cache usage rather than another PPR phase. A production framework can detect the active cache scope and report a usage error; the demo documents the invariant instead.</div>
+    </details>
+  </section>
+
+  <section id="two-passes">
+    <h2><a href="#two-passes">Why two RSC passes</a></h2>
+    <div class="passes">
+      <article class="pass">
+        <h3>Pass 1: warmup</h3>
+        <p>The cache starts cold. This pass exists to discover and finish cache fills, not to produce the durable shell.</p>
+        <div class="sequence">
+          <div>render tree</div>
+          <div class="fill">discover and materialize cache entries</div>
+          <div class="cut">demo: reach flag + cache settle, then abort</div>
+          <div>cancel and discard prelude</div>
+        </div>
+      </article>
+      <article class="pass">
+        <h3>Pass 2: final</h3>
+        <p>The same payload renders again against a warm cache. This yields a clean partial Flight stream with cacheable shell work already available.</p>
+        <div class="sequence">
+          <div>restart render</div>
+          <div class="use">replay warm cache entries</div>
+          <div class="cut">reuse the same readiness gate and cutoff decision</div>
+          <div>send partial Flight into HTML prerender</div>
+        </div>
+      </article>
+    </div>
+    <details class="note">
+      <summary>Why not keep the warmup output?</summary>
+      <div>The prospective pass may contain transient suspension and fallback behavior from filling the cache. Restarting makes the persisted shell describe the warm-cache state, not the process used to reach it.</div>
+    </details>
+  </section>
+
+  <section id="approximations">
+    <h2><a href="#approximations">Deliberate runtime approximations</a></h2>
+    <p>No implementation can infer that arbitrary application async work is globally finished. Each framework defines which work it tracks and a scheduler window after which remaining suspension is treated as dynamic. The demo uses the smallest versions of those same approximations.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Concern</th><th>Demo approximation</th><th>Production variants</th><th>Contract boundary</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dynamic witness</td>
+            <td><code>dynamicReached</code> explicitly records that <code>markDynamic</code> created the hole.</td>
+            <td>vinext uses <code>hasDynamicBoundary</code>; Next.js observes a stream still pending after its permitted static scheduling window.</td>
+            <td>Intentional suspension must use a framework-owned dynamic API.</td>
+          </tr>
+          <tr>
+            <td>Scheduler settling</td>
+            <td>One <code>setTimeout(0)</code> lets React process cache pings before the gate is rechecked.</td>
+            <td>vinext waits across delayed tasks; Next.js coordinates sequential tasks and React's immediate queue.</td>
+            <td>Each is a framework-specific cutoff window, not proof that arbitrary async work is exhausted.</td>
+          </tr>
+          <tr>
+            <td>Cache readiness</td>
+            <td><code>pendingWork</code> tracks promises created by the demo's cache wrapper.</td>
+            <td>Next.js uses cache and module signals; vinext counts framework-owned cache tasks.</td>
+            <td>Only registered cache work participates; unrelated application promises are not readiness signals.</td>
+          </tr>
+          <tr>
+            <td>Cache/dynamic composition</td>
+            <td>The demo documents dynamic access inside tracked cache work as invalid.</td>
+            <td>Production frameworks can detect cache scope and report the usage error; broader runtimes may also guard readiness defensively.</td>
+            <td>Cache fills must not directly depend on request-time data.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="invariant" style="margin-top:34px">
+    <h3>The one sentence to retain</h3>
+    <p><strong>Race natural completion against readiness: completion proves fully static output, while readiness proves an intentional dynamic hole remains after discovered cache work settles and React receives a retry turn.</strong></p>
+  </div>
+
+  <p class="foot">Local investigation artifact. Code claims verified against <code>packages/plugin-rsc/examples/ppr</code> at <code>3ec1aa8f7d165150d4ec80d8b0cce365a41293b8</code>. No external assets or runtime JavaScript.</p>
+</main>
+</body>
+</html>
