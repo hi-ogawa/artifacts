@@ -1,0 +1,19 @@
+src/vite-plugin-react-ppr-component-flow.html
+  s_a3ff7a83c14ece::t_3887d9fda3beb8 285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8186efa8b070903314fd415a28798e7f4b503ffe",
+  "prompts": {},
+  "sessions": {
+    "s_a3ff7a83c14ece": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_077902d0cffelF7f5wkGgN6cIV",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Hiroshi Ogawa <4232207+hi-ogawa@users.noreply.github.com>"
+    }
+  }
+}
