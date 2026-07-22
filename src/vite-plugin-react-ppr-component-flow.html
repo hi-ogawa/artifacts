@@ -61,7 +61,7 @@
   .legend { display: flex; flex-wrap: wrap; gap: 15px; margin: 0 0 14px; color: var(--muted); font-size: 12px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; }
-  .tree { display: grid; grid-template-columns: minmax(270px, .85fr) minmax(0, 1.6fr); gap: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .tree { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
   .node { padding: 15px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
   .node p { color: #44433e; font-size: 13px; }
   .node.cache { border-left: 5px solid var(--cache); background: var(--cache-bg); }
@@ -73,7 +73,9 @@
   .tag.dynamic { color: var(--dynamic); background: #efd3df; }
   .tag.client { color: var(--client); background: #d5e9f2; }
   .tag.shell { color: var(--shell); background: #e4d9ec; }
-  .children { display: grid; gap: 10px; }
+  .children-frame { margin-top: 14px; padding: 12px; border: 2px dashed rgba(154,100,23,.55); border-radius: 10px; background: rgba(255,255,255,.58); }
+  .children-frame > p { margin: 0 0 10px; color: #5e503a; font-size: 12px; }
+  .children { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .callout { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-left: 5px solid var(--cache); border-radius: 8px; background: var(--surface); color: #44433e; }
   .render-flows { display: grid; gap: 14px; }
   .render-flow { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
@@ -138,7 +140,8 @@
   .foot { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
   @media (max-width: 820px) {
     .wrap { padding: 22px 15px 54px; }
-    .tree, .api-grid { grid-template-columns: 1fr; }
+    .api-grid { grid-template-columns: 1fr; }
+    .children { grid-template-columns: 1fr; }
     .api-pair { grid-template-columns: 1fr; }
     .flow-head { align-items: flex-start; flex-direction: column; }
     .outcome { width: 100%; max-width: none; }
@@ -182,22 +185,25 @@
       <article class="node cache">
         <span class="tag cache">cached frame</span>
         <h3>CachedLayout</h3>
-        <p>Produces the document frame, layout timestamp, and navigation. Its cached output is reusable across routes and requests.</p>
+        <p>Produces the document frame, layout timestamp, and navigation. Its cached output is reusable, but its <code>children</code> remain a temporary-reference slot filled by the surrounding render.</p>
+        <div class="children-frame">
+          <p><span class="tag cache">children slot</span> JSX children travel as temporary references, so the layout cache stores a reusable frame with placeholders instead of baking these child elements into the cache entry.</p>
+          <div class="children">
+            <article class="node dynamic">
+              <span class="tag dynamic">dynamic child</span>
+              <h3>DynamicContent</h3>
+              <p><code>markDynamic()</code> leaves this Suspense branch pending during prerender. Its fallback becomes part of the static HTML shell.</p>
+            </article>
+            <article class="node async">
+              <span class="tag async">cached async</span>
+              <h3>CachedAsyncContent</h3>
+              <p>The 100 ms miss is useful static work. Warmup waits for and stores it, so the final shell contains its resolved output.</p>
+            </article>
+          </div>
+        </div>
       </article>
-      <div class="children">
-        <article class="node dynamic">
-          <span class="tag dynamic">dynamic child</span>
-          <h3>DynamicContent</h3>
-          <p><code>markDynamic()</code> leaves this Suspense branch pending during prerender. Its fallback becomes part of the static HTML shell.</p>
-        </article>
-        <article class="node async">
-          <span class="tag async">cached async</span>
-          <h3>CachedAsyncContent</h3>
-          <p>The 100 ms miss is useful static work. Warmup waits for and stores it, so the final shell contains its resolved output.</p>
-        </article>
-      </div>
     </div>
-    <div class="callout"><strong>Cache serialization is an existing primitive, not the PPR mechanism.</strong> <code>createCachedComponent</code> also works as a general in-memory cache. PPR adds readiness tracking for its fills and uses <code>markDynamic</code> to identify the request-time hole.</div>
+    <div class="callout"><strong>Cache serialization is an existing primitive, not the PPR mechanism.</strong> The dashed child slot is the cache component temporary-reference hole: non-serializable JSX children are passed through as references rather than becoming the cached layout value. PPR adds readiness tracking for cache fills and uses <code>markDynamic</code> to identify the request-time hole inside that slot.</div>
     <div class="code-panel">
       <div class="code-title">The PPR roles in root.tsx</div>
       <pre><span style="color:var(--cache)">const CachedLayout = createCachedComponent(Layout)
