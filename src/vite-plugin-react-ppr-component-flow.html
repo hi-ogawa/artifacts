@@ -282,6 +282,7 @@ const CachedAsyncContent = createCachedComponent(AsyncContent)</span>
         </div>
       </article>
     </div>
+    <div class="callout"><strong>Driving both passes with <code>prerender()</code> is a demo choice, not an architectural requirement.</strong> This runtime uses the static renderer for warmup and partial-Flight capture because it already supports a clean cutoff, but the same partial Flight can be produced other ways. In principle the warmup could instead drain a plain <code>renderToReadableStream()</code>, and a partial prelude can be recovered from a controlled <code>renderToReadableStream()</code> cutoff too. Next.js and vinext even pick opposite arrangements: Next.js produces its final RSC with <a href="https://github.com/vercel/next.js/blob/153bf8ac5fa00888ef5fbb2b65cac12f0942a44f/packages/next/src/server/app-render/app-render.tsx#L8230-L8607"><code>renderToReadableStream()</code> under staged cutoff</a>, while vinext <a href="https://github.com/cloudflare/vinext/blob/fd1cc3d3ddaaec8c130d5e4bcae3a6f761089756/packages/vinext/src/server/app-ppr-fallback-shell-render.ts#L28-L55">warms with <code>renderToReadableStream()</code></a> and captures its <a href="https://github.com/cloudflare/vinext/blob/fd1cc3d3ddaaec8c130d5e4bcae3a6f761089756/packages/vinext/src/server/app-page-render.ts#L731-L752">final Flight with <code>prerender()</code></a>. What is fundamental is the phased control (readiness, an intentional dynamic hole, and a cutoff), not the specific stream API.</div>
   </section>
 
   <section id="dom-handoff">
