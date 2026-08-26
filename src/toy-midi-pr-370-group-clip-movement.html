@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PR 370 · Group-moving recorder clips</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
+  <style>
+    :root { --ink:#18201d; --muted:#64706a; --line:#d9dfdb; --paper:#f7f8f5; --card:#fff; --green:#286a4b; --green-soft:#e5f1ea; --blue:#2e6381; --blue-soft:#e7f0f5; --orange:#9b572d; --orange-soft:#f7ece4; --shadow:0 12px 34px rgba(28,42,34,.08); --toc-sticky-offset:18px; --toc-layer:20; --toc-width:190px; --toc-anchor-offset:80px; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+    a { color:var(--blue); }
+    .wrap { width:min(1120px, calc(100% - 40px)); margin:auto; padding:52px 0 90px; }
+    .toc { position:sticky; top:var(--toc-sticky-offset); z-index:var(--toc-layer); width:var(--toc-width); height:0; margin-left:auto; }
+    .toc summary { padding:9px 12px; border:1px solid var(--line); border-radius:9px; background:#fff; box-shadow:0 5px 18px rgba(20,30,24,.1); cursor:pointer; list-style:none; }
+    .toc nav { position:absolute; top:46px; right:0; width:240px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:var(--shadow); }
+    .toc nav a { display:block; padding:7px 8px; text-decoration:none; border-radius:6px; }
+    .toc nav a:hover { background:var(--blue-soft); }
+    section[id] { scroll-margin-top:var(--toc-anchor-offset); }
+    header { max-width:840px; padding-right:120px; }
+    .eyebrow { color:var(--green); font-weight:700; letter-spacing:.04em; }
+    h1 { margin:.2rem 0 .8rem; font:700 clamp(2.5rem,7vw,5.2rem)/.98 Georgia, serif; letter-spacing:-.04em; }
+    h2 { margin:0 0 18px; font:700 2rem/1.1 Georgia, serif; }
+    h2 a { color:inherit; text-decoration:none; }
+    h3 { margin:0 0 8px; font-size:1rem; }
+    .lede { font-size:1.25rem; color:#44504a; max-width:760px; }
+    .links { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+    .links a { padding:7px 11px; border:1px solid var(--line); border-radius:999px; background:#fff; text-decoration:none; }
+    section { margin-top:76px; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:34px; }
+    .metric, .card { border:1px solid var(--line); border-radius:14px; background:var(--card); box-shadow:var(--shadow); }
+    .metric { padding:18px; }
+    .metric b { display:block; font:700 1.45rem Georgia,serif; }
+    .metric span { color:var(--muted); font-size:.9rem; }
+    .matrix { display:grid; grid-template-columns:1.2fr repeat(3,1fr); border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#fff; }
+    .matrix > div { padding:15px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .matrix > div:nth-child(4n) { border-right:0; }
+    .matrix .head { background:#edf1ed; font-weight:700; }
+    .yes { color:var(--green); font-weight:700; }
+    .flow { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; align-items:center; gap:10px; }
+    .flow .node { min-height:120px; padding:18px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    .flow .arrow { color:var(--muted); font-size:1.6rem; }
+    .node.click { border-top:5px solid var(--blue); }
+    .node.drag { border-top:5px solid var(--orange); }
+    .node.shared { border-top:5px solid var(--green); }
+    .timeline { position:relative; height:180px; border:1px solid var(--line); border-radius:14px; background:repeating-linear-gradient(90deg,#fff 0,#fff 79px,#e9ede9 80px); overflow:hidden; }
+    .axis { position:absolute; left:18px; top:13px; color:var(--muted); font-size:.85rem; }
+    .clip { position:absolute; height:40px; border-radius:6px; display:flex; align-items:center; padding:0 12px; font-weight:700; }
+    .clip.audio { left:110px; top:45px; width:220px; color:#174f37; background:#d9eee2; border:2px solid #4d9b73; }
+    .clip.take { left:235px; top:105px; width:170px; color:#25516a; background:#dcecf4; border:2px solid #6492aa; }
+    .delta { position:absolute; left:410px; top:64px; width:120px; border-top:2px dashed var(--orange); color:var(--orange); text-align:center; }
+    .walk { display:grid; gap:22px; }
+    .step { display:grid; grid-template-columns:70px 1fr; gap:18px; }
+    .step-number { width:52px; height:52px; display:grid; place-items:center; border-radius:50%; background:var(--green); color:#fff; font:700 1.2rem Georgia,serif; }
+    .step-body { min-width:0; }
+    .step-body > p { color:#4d5953; }
+    .source { font-size:.85rem; }
+    pre[class*="language-"] { margin:14px 0 0; overflow:auto; border-radius:10px; background:#2d2d2d; color:#ccc; text-shadow:none; font-size:.85rem; }
+    code[class*="language-"] { text-shadow:none; }
+    .invariant { padding:22px; border-left:5px solid var(--green); background:var(--green-soft); border-radius:0 12px 12px 0; font-size:1.1rem; }
+    .checks { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+    .check { padding:18px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+    .check b { color:var(--green); }
+    .quiz { display:grid; gap:16px; }
+    .question { padding:20px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    .options { display:grid; gap:8px; margin-top:12px; }
+    .options button { padding:10px 12px; text-align:left; border:1px solid var(--line); border-radius:8px; background:#fafbf9; cursor:pointer; }
+    .options button:hover { border-color:var(--blue); }
+    .feedback { min-height:24px; margin-top:10px; color:var(--muted); }
+    .feedback.good { color:var(--green); }
+    .feedback.bad { color:#9a3f35; }
+    .foot { margin-top:70px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:.9rem; }
+    @media (max-width:800px) { header{padding-right:0}.summary,.checks{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.flow .arrow{transform:rotate(90deg);text-align:center}.matrix{font-size:.8rem}.matrix>div{padding:9px}.step{grid-template-columns:48px 1fr}.toc{display:none} }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <details class="toc"><summary>Contents</summary><nav aria-label="Page sections"><a href="#overview">Overview</a><a href="#behavior">Behavior</a><a href="#gesture">Gesture split</a><a href="#walkthrough">Code walkthrough</a><a href="#verification">Verification</a><a href="#quiz">Review quiz</a></nav></details>
+  <header id="overview">
+    <div class="eyebrow">toy-midi · PR #370 explain-diff</div>
+    <h1>One drag,<br>many clips.</h1>
+    <p class="lede">Recorder selection now spans imported audio and recorded takes. A drag captures one group snapshot, clamps one shared delta, and commits both clip types through one runtime mutation.</p>
+    <div class="links"><a href="https://github.com/hi-ogawa/toy-midi/pull/370">Pull request</a><a href="https://github.com/hi-ogawa/toy-midi/issues/369">Issue #369</a><a href="https://github.com/hi-ogawa/toy-midi/tree/57cee20e8f66fdc90b3e32e7550e8e723d2b9152">Pinned source</a></div>
+    <div class="summary"><div class="metric"><b>2 clip types</b><span>Audio tracks and recorded takes share selection.</span></div><div class="metric"><b>4 px threshold</b><span>Click intent is separated from drag intent.</span></div><div class="metric"><b>1 shared delta</b><span>Relative timing survives boundary clamping.</span></div></div>
+  </header>
+
+  <section id="behavior"><h2><a href="#behavior">The behavior contract</a></h2>
+    <div class="matrix"><div class="head">Pointer action</div><div class="head">Target selected?</div><div class="head">Modifier</div><div class="head">Result</div><div>Click</div><div>Either</div><div>None</div><div>Select only target</div><div>Click</div><div>Either</div><div>Ctrl/Cmd</div><div>Toggle target</div><div>Drag</div><div class="yes">Yes</div><div>Either</div><div>Preserve selected group</div><div>Drag</div><div>No</div><div>Ctrl/Cmd</div><div>Add target, move group</div><div>Drag</div><div>No</div><div>None</div><div>Replace selection, move target</div></div>
+    <p class="invariant"><strong>Invariant:</strong> group movement changes every selected clip by the same clamped timeline delta. The runtime never reorders takes, so newer-take-wins comping remains intact.</p>
+    <div class="timeline"><span class="axis">Timeline boundary at 0</span><div class="clip audio">Imported audio</div><div class="clip take">Recorded take</div><div class="delta">same Δ →</div></div>
+  </section>
+
+  <section id="gesture"><h2><a href="#gesture">First classify intent</a></h2>
+    <div class="flow"><div class="node shared"><h3>Pointer down</h3><p><code>onStart</code> captures Ctrl/Cmd state and gesture-local data immediately.</p></div><div class="arrow">→</div><div class="node click"><h3>Under 4 px</h3><p>Pointer up becomes <code>onClick</code>. Selection changes without moving anything.</p></div><div class="arrow">or</div><div class="node drag"><h3>Cross 4 px</h3><p><code>onDragStart</code> resolves group membership and snapshots positions before live movement.</p></div></div>
+  </section>
+
+  <section id="walkthrough"><h2><a href="#walkthrough">Causal code walkthrough</a></h2><div class="walk">
+    <article class="step"><div class="step-number">1</div><div class="step-body"><h3>Pointer routing stays generic</h3><p><code>listenPointerDrag</code> owns pointer capture, identity, end, and cancellation. The new gesture utility layers click-versus-drag classification on top rather than duplicating routing.</p><a class="source" href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/src/utils/pointer-gesture.ts#L48-L80">src/utils/pointer-gesture.ts:48-80</a><pre><code class="language-typescript">if (!state.dragged &amp;&amp; deltaSquared &gt;= threshold ** 2) {
+  state.dragged = true;
+  onDragStart(event, gesture);
+}
+if (state.dragged) onDragMove(event, gesture);</code></pre></div></article>
+    <article class="step"><div class="step-number">2</div><div class="step-body"><h3>The clip binds intent to recorder semantics</h3><p><code>onStart</code> captures modifiers. Only confirmed drags call <code>startMove</code>, while sub-threshold releases call selection.</p><a class="source" href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/src/components/recorder/index.tsx#L1925-L1953">src/components/recorder/index.tsx:1925-1953</a><pre><code class="language-tsx">onStart: event =&gt; ({
+  additive: event.ctrlKey || event.metaKey,
+  snapshot: undefined,
+}),
+onClick: (_, { data }) =&gt; onClipClick?.(data.additive)</code></pre></div></article>
+    <article class="step"><div class="step-number">3</div><div class="step-body"><h3>One private selection model spans clip types</h3><p>Audio tracks and takes map into private string keys. Callers only see semantic operations such as <code>isSelected</code>, <code>select</code>, and <code>startMove</code>.</p><a class="source" href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/src/components/recorder/index.tsx#L510-L556">src/components/recorder/index.tsx:510-556</a><pre><code class="language-typescript">function select(clip, additive) {
+  const key = getKey(clip);
+  if (!additive) return setKeys(new Set([key]));
+  const next = new Set(keys);
+  next.has(key) ? next.delete(key) : next.add(key);
+  setKeys(next);
+}</code></pre></div></article>
+    <article class="step"><div class="step-number">4</div><div class="step-body"><h3>Drag start freezes the movement facts</h3><p>The selected IDs, each original timeline offset, and the group’s minimum visible start are captured once. Trimming matters because the visible boundary is <code>timelineOffset + trimStart</code>.</p><a class="source" href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/src/components/recorder/index.tsx#L558-L596">src/components/recorder/index.tsx:558-596</a><pre><code class="language-typescript">return {
+  clips,
+  minimumVisibleStart: Math.min(
+    ...audioTracks.map(t =&gt; t.timelineOffset + t.trimStart),
+    ...takes.map(t =&gt; t.timelineOffset + t.trimStart),
+  ),
+};</code></pre></div></article>
+    <article class="step"><div class="step-number">5</div><div class="step-body"><h3>Every move uses one clamp</h3><p>The earliest visible clip determines how far left the group can travel. Applying the same result to every original offset preserves spacing.</p><a class="source" href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/src/components/recorder/index.tsx#L598-L607">src/components/recorder/index.tsx:598-607</a><pre><code class="language-typescript">const clampedDelta = Math.max(
+  delta,
+  -snapshot.minimumVisibleStart,
+);
+runtime.moveClips(snapshot.clips.map(clip =&gt; ({
+  ...clip,
+  timelineOffset: clip.timelineOffset + clampedDelta,
+})));</code></pre></div></article>
+    <article class="step"><div class="step-number">6</div><div class="step-body"><h3>The runtime commits mixed offsets atomically</h3><p>The runtime validates all IDs, pauses once if needed, derives both next track states, performs one store update, synchronizes playback and comp regions, then resumes once.</p><a class="source" href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/src/lib/recorder/runtime.ts#L231-L288">src/lib/recorder/runtime.ts:231-288</a><pre><code class="language-typescript">const audioTracks = state.audioTracks.map(updateAudioOffset);
+const recordingTrack = {
+  ...state.recordingTrack,
+  takes: state.recordingTrack.takes.map(updateTakeOffset),
+};
+this.store.update({ audioTracks, recordingTrack });</code></pre></div></article>
+  </div></section>
+
+  <section id="verification"><h2><a href="#verification">Behavior is tested end to end</a></h2><div class="checks"><div class="check"><b>Selection</b><p>Import audio, record a take, plain-click audio, then Ctrl-click the take. Both expose <code>data-selected=true</code>.</p></div><div class="check"><b>Shared movement</b><p>Dragging the take by roughly 80 px moves both bounding boxes by the same amount.</p></div><div class="check"><b>Clear selection</b><p>Clicking empty timeline space removes selection from both clip types.</p></div><div class="check"><b>Regression suite</b><p><code>pnpm lint</code>, 134 unit tests, and all 3 focused recorder E2E scenarios pass.</p></div></div><p><a href="https://github.com/hi-ogawa/toy-midi/blob/57cee20e8f66fdc90b3e32e7550e8e723d2b9152/e2e/fake-audio/recorder.test.ts#L67-L121">Read the pinned E2E scenario</a></p></section>
+
+  <section id="quiz"><h2><a href="#quiz">Check your model</a></h2><div class="quiz">
+    <div class="question" data-answer="1"><h3>1. Why is selection not changed in <code>onStart</code>?</h3><div class="options"><button type="button">React state cannot update during pointerdown</button><button type="button">Because intent is unknown until release or threshold crossing</button><button type="button">Pointer capture prevents selection</button></div><div class="feedback" data-explain="Pointerdown begins both clicks and drags. Waiting avoids applying click toggle semantics to a confirmed drag."></div></div>
+    <div class="question" data-answer="2"><h3>2. What preserves spacing when the group reaches timeline zero?</h3><div class="options"><button type="button">Clamping each clip independently</button><button type="button">Sorting clips by start time</button><button type="button">Clamping one shared delta against the earliest visible start</button></div><div class="feedback" data-explain="Independent clamps would collapse spacing. One shared clamp shifts every original offset by the same amount."></div></div>
+    <div class="question" data-answer="0"><h3>3. Why does the snapshot use <code>timelineOffset + trimStart</code>?</h3><div class="options"><button type="button">The timeline boundary applies to the visible clip edge</button><button type="button">It converts seconds to beats</button><button type="button">It determines take ordering</button></div><div class="feedback" data-explain="A trimmed source can have a negative buffer-zero offset while its visible edge remains at or after timeline zero."></div></div>
+    <div class="question" data-answer="1"><h3>4. Why does <code>moveClips</code> update audio and takes together?</h3><div class="options"><button type="button">To reduce TypeScript types</button><button type="button">Observers should not see a partially moved mixed selection</button><button type="button">Audio clips and takes share one array</button></div><div class="feedback" data-explain="One store update gives the mixed movement an atomic state boundary even though the clip types live in different collections."></div></div>
+    <div class="question" data-answer="2"><h3>5. What happens when Ctrl/Cmd-drag begins on an unselected clip?</h3><div class="options"><button type="button">The existing group is replaced</button><button type="button">The target toggles off</button><button type="button">The target joins the existing group before movement</button></div><div class="feedback" data-explain="Additive drag differs from additive click: it joins an unselected target so there is a group to move, rather than toggling it off."></div></div>
+  </div></section>
+  <p class="foot">Generated from toy-midi PR #370 at commit <code>57cee20e</code>. The artifact explains the final diff against <code>main</code>, not the intermediate commit sequence.</p>
+</main>
+<script>document.querySelectorAll('.question').forEach(q=>q.querySelectorAll('button').forEach((b,i)=>b.addEventListener('click',()=>{const f=q.querySelector('.feedback');const ok=i===Number(q.dataset.answer);f.className='feedback '+(ok?'good':'bad');f.textContent=(ok?'Correct. ':'Not quite. ')+f.dataset.explain;})));window.Prism={manual:true};</script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-core.min.js"></script><script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/plugins/autoloader/prism-autoloader.min.js"></script><script>if(window.Prism){if(Prism.plugins?.autoloader)Prism.plugins.autoloader.languages_path='https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/';Prism.highlightAll();}</script>
+</body>
+</html>
